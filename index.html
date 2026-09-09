@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Neuro Runner // Unauthorized Subsystem</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;800&display=swap" rel="stylesheet">
+  <script>
+    if (window.tailwind) window.tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cyan: {
+              400: '#00f0ff',
+              500: '#00d8ff',
+              900: '#003135',
+              950: '#001a1c'
+            }
+          },
+          fontFamily: {
+            mono: ['"Share Tech Mono"', 'monospace'],
+            code: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      /* Default fallback for desktop or before JS loads */
+      --tg-viewport-height: 100vh;
+      --tg-viewport-stable-height: 100vh;
+      
+      /* 1. Initialize safe areas to 0px (Fallback for browsers without env support) */
+      --tg-safe-area-top: 0px;
+      --tg-safe-area-bottom: 0px;
+
+      /* 2. Use standard environment variables (Overrides 0px if supported) */
+      --tg-safe-area-top: env(safe-area-inset-top, 0px);
+      --tg-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    
+    html, body {
+      background-color: #000;
+      color: #00f0ff;
+      font-family: 'Share Tech Mono', monospace;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      /* Use the dynamic variable calculated via JS for mobile, fallback to 100vh for desktop */
+      height: var(--tg-viewport-height, 100vh); 
+      width: 100vw;
+    }
+    
+    /* CRT Scanline Effect */
+    .crt::after {
+      content: " ";
+      display: block;
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      z-index: 100;
+      background-size: 100% 3px, 3px 100%;
+      pointer-events: none;
+    }
+
+    .neon-text {
+      text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+    }
+
+    .cyber-shape {
+      clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(0, 240, 255, 0.02);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(0, 240, 255, 0.2);
+    }
+
+    /* Safe Area Utilities with fallbacks */
+    .pt-safe { padding-top: var(--tg-safe-area-top, 0px); }
+    .pb-safe { padding-bottom: var(--tg-safe-area-bottom, 0px); }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@^19.2.4",
+      "react/": "https://esm.sh/react@^19.2.4/",
+      "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+      "zustand": "https://esm.sh/zustand@^5.0.11",
+      "zustand/": "https://esm.sh/zustand@^5.0.11/"
+    }
+  }
+  </script>
+  <script>
+    // Telegram Mini App Viewport Logic
+    (function() {
+      const tg = window.Telegram?.WebApp;
+      if (!tg) return;
+
+      const platform = tg.platform || 'unknown';
+      // Identify strictly mobile/tablet platforms
+      const isMobile = ['android', 'ios'].includes(platform);
+
+      function updateViewport() {
+        if (!isMobile) return; // Do not touch layout on Desktop/Web
+
+        // 1. Force Expand / Fullscreen
+        if (!tg.isExpanded) tg.expand();
+        if (tg.requestFullscreen) {
+            try { tg.requestFullscreen(); } catch(e) { console.log('Fullscreen not supported'); }
+        }
+
+        // 2. Set Viewport Height Variables
+        // This ensures the app takes exactly the available height provided by Telegram,
+        // avoiding issues with bottom bars or keyboard.
+        const vh = tg.viewportHeight;
+        const stableVh = tg.viewportStableHeight;
+
+        if (vh) {
+            document.documentElement.style.setProperty('--tg-viewport-height', `${vh}px`);
+        }
+        if (stableVh) {
+            document.documentElement.style.setProperty('--tg-viewport-stable-height', `${stableVh}px`);
+        }
+
+        // 3. Update Safe Area (Existing Logic)
+        const inset = tg.contentSafeAreaInset;
+        if (inset) {
+          document.documentElement.style.setProperty('--tg-safe-area-top', (inset.top || 0) + 'px');
+          document.documentElement.style.setProperty('--tg-safe-area-bottom', (inset.bottom || 0) + 'px');
+        }
+      }
+
+      // Initialize
+      tg.ready();
+      
+      // On Mobile/Tablet: Bind listeners to keep layout in sync
+      if (isMobile) {
+          updateViewport(); // Initial call
+          tg.onEvent('viewportChanged', updateViewport);
+          window.addEventListener('resize', updateViewport); // Fallback
+      } else {
+          // On Desktop: Just ensure safe area is set once, but let CSS 100vh handle height
+          const inset = tg.contentSafeAreaInset;
+          if (inset) {
+             document.documentElement.style.setProperty('--tg-safe-area-top', (inset.top || 0) + 'px');
+             document.documentElement.style.setProperty('--tg-safe-area-bottom', (inset.bottom || 0) + 'px');
+          }
+      }
+    })();
+  </script>
+</head>
+<body class="bg-black crt">
+  <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
