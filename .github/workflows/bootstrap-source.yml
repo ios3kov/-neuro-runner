@@ -1,0 +1,31 @@
+name: Bootstrap source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        shell: bash
+        run: |
+          cat source/source.part* > /tmp/source.b64
+          base64 -d /tmp/source.b64 > /tmp/source.tar.xz
+          tar -xJf /tmp/source.tar.xz -C .
+          rm -rf source
+      - name: Commit source
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Import refactored Neuro Runner source'
+          git push
