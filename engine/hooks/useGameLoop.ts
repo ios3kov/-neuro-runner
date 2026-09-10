@@ -83,7 +83,7 @@ export const useGameLoop = ({
 
       const canvas = canvasRef.current;
       if (canvas) {
-        const viewport = syncCanvasViewport(canvas, lowPowerMode ? 1 : 3);
+        const viewport = syncCanvasViewport(canvas, lowPowerMode ? 1 : 2);
         if (viewport) {
           const { ctx, width, height } = viewport;
           ctx.save();
