@@ -14,9 +14,11 @@ import {
   pongModeForLevel,
   pongTargetForLevel,
 } from './pong/pongConfig';
+import { drawPongScene } from './pong/pongRenderer';
 
 export const PongGame: React.FC = () => {
   const addLog = useStore((s) => s.addLog);
+  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);
   const updateStats = useGameStore((s) => s.updateStats);
   const state = useRef<PongState>(createPongState(1));
 
@@ -251,107 +253,8 @@ export const PongGame: React.FC = () => {
   }, [addLog, handleAiHit, handlePlayerHit, resetBall, updateStats]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const s = state.current;
-    const w = (value: number) => (value / 100) * width;
-    const h = (value: number) => (value / 100) * height;
-
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, 'rgba(255,0,85,0.06)');
-    gradient.addColorStop(0.5, 'rgba(0,240,255,0.015)');
-    gradient.addColorStop(1, 'rgba(0,240,255,0.06)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.strokeStyle = 'rgba(0,240,255,0.08)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([8, 12]);
-    ctx.beginPath();
-    ctx.moveTo(0, height / 2);
-    ctx.lineTo(width, height / 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    if (s.mode === 'PULSE' || s.mode === 'CORE') {
-      ctx.fillStyle = s.pulseActive ? 'rgba(245,158,11,0.12)' : 'rgba(0,240,255,0.025)';
-      ctx.fillRect(0, h(39), width, h(22));
-      ctx.strokeStyle = s.pulseActive ? 'rgba(245,158,11,0.45)' : 'rgba(0,240,255,0.08)';
-      ctx.strokeRect(0, h(39), width, h(22));
-    }
-
-    if (s.mode === 'WARP' || s.mode === 'CORE') {
-      ctx.shadowBlur = 14;
-      ctx.shadowColor = '#7c3aed';
-      ctx.fillStyle = 'rgba(124,58,237,0.55)';
-      ctx.fillRect(0, h(24), w(1.1), h(52));
-      ctx.fillRect(width - w(1.1), h(24), w(1.1), h(52));
-      ctx.shadowBlur = 0;
-    }
-
-    s.barriers.forEach((barrier) => {
-      const oscillation = Math.sin(s.elapsed * (0.8 + s.level * 0.025) + barrier.phase) * (s.level >= 13 ? 10 : 6);
-      const bx = barrier.x + oscillation;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#f59e0b';
-      ctx.fillStyle = 'rgba(245,158,11,0.65)';
-      ctx.fillRect(w(bx), h(barrier.y), w(barrier.w), h(barrier.h));
-      ctx.shadowBlur = 0;
-    });
-
-    const drawPaddle = (paddle: Paddle, yPct: number, color: string) => {
-      ctx.shadowBlur = 16;
-      ctx.shadowColor = color;
-      ctx.fillStyle = color;
-      ctx.fillRect(w(paddle.x), h(yPct), w(paddle.w), Math.max(4, h(1.3)));
-      ctx.fillStyle = '#fff';
-      ctx.globalAlpha = 0.75;
-      ctx.fillRect(w(paddle.x + paddle.w * 0.2), h(yPct + 0.38), w(paddle.w * 0.6), Math.max(1, h(0.18)));
-      ctx.globalAlpha = 1;
-      ctx.shadowBlur = 0;
-    };
-
-    drawPaddle(s.p2, 4.2, '#ff0055');
-    drawPaddle(s.p1, 94.5, '#00f0ff');
-
-    s.trails.forEach((trail, index) => {
-      const hue = s.pulseActive ? '245,158,11' : index % 2 === 0 ? '0,240,255' : '255,255,255';
-      ctx.fillStyle = `rgba(${hue},${trail.alpha * 0.38})`;
-      const radius = Math.max(1.5, w(s.ball.size * 0.65));
-      ctx.beginPath();
-      ctx.arc(w(trail.x), h(trail.y), radius, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    ctx.shadowBlur = s.pulseActive ? 22 : 14;
-    ctx.shadowColor = s.pulseActive ? '#f59e0b' : '#fff';
-    ctx.fillStyle = s.pulseActive ? '#fde68a' : '#fff';
-    ctx.beginPath();
-    ctx.arc(w(s.ball.x), h(s.ball.y), Math.max(3.5, w(s.ball.size)), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.textAlign = 'center';
-    ctx.font = `bold ${Math.max(18, Math.floor(width * 0.055))}px monospace`;
-    ctx.fillStyle = 'rgba(255,0,85,0.2)';
-    ctx.fillText(String(s.p2.score), width * 0.15, height * 0.24);
-    ctx.fillStyle = 'rgba(0,240,255,0.22)';
-    ctx.fillText(String(s.p1.score), width * 0.15, height * 0.79);
-
-    ctx.font = `bold ${Math.max(9, Math.floor(width * 0.025))}px monospace`;
-    ctx.fillStyle = 'rgba(0,240,255,0.55)';
-    ctx.textAlign = 'left';
-    ctx.fillText(`RALLY ${s.rally}`, 12, height - 42);
-    ctx.fillText(`COMBO x${Math.max(1, s.combo)}`, 12, height - 25);
-
-    ctx.fillStyle = s.mode === 'CORE' ? '#f59e0b' : 'rgba(255,255,255,0.35)';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${s.mode} // FIRST TO ${s.targetScore}`, width - 12, 22);
-
-    if (s.pulseActive) {
-      ctx.fillStyle = '#f59e0b';
-      ctx.textAlign = 'center';
-      ctx.fillText('PULSE OVERDRIVE', width / 2, height / 2 - 12);
-    }
-  }, []);
+    drawPongScene(ctx, state.current, width, height, { lowPowerMode });
+  }, [lowPowerMode]);
 
   const instructions = useMemo(() => [
     'MOVE THE CYAN PADDLE WITH ARROWS, A/D OR HORIZONTAL TOUCH DRAG.',
