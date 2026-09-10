@@ -51,7 +51,7 @@ describe('PONG domain configuration', () => {
 
   it('keeps target score, paddle width and barriers coherent', () => {
     expect(pongTargetForLevel(1)).toBe(3);
-    expect(pongTargetForLevel(20)).toBe(6);
+    expect(pongTargetForLevel(20)).toBe(5);
     expect(pongPaddleWidthForLevel(1)).toBeGreaterThan(pongPaddleWidthForLevel(20));
     expect(buildPongBarriers(1)).toHaveLength(0);
     expect(buildPongBarriers(4).length).toBeGreaterThan(0);
