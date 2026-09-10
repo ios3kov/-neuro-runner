@@ -3,14 +3,14 @@ import type { DriftGateKind, DriftLevelRules } from './driftTypes';
 export const getDriftRules = (level: number): DriftLevelRules => ({
   level,
   targetPassed: 10 + Math.floor((level - 1) * 1.25),
-  baseSpeed: 38 + level * 3.8,
-  acceleration: 0.35 + level * 0.035,
-  gateWidth: Math.max(11, 31 - level * 0.72),
-  spawnEvery: Math.max(0.48, 1.25 - level * 0.03),
-  lives: level >= 16 ? 2 : 3,
-  movingChance: level >= 4 ? Math.min(0.32, 0.08 + (level - 4) * 0.017) : 0,
-  boostChance: level >= 7 ? Math.min(0.24, 0.06 + (level - 7) * 0.015) : 0,
-  glitchChance: level >= 11 ? Math.min(0.22, 0.05 + (level - 11) * 0.018) : 0,
+  baseSpeed: 36 + level * 3.2,
+  acceleration: 0.32 + level * 0.03,
+  gateWidth: Math.max(13, 32 - level * 0.65),
+  spawnEvery: Math.max(0.55, 1.28 - level * 0.028),
+  lives: level >= 19 ? 2 : 3,
+  movingChance: level >= 4 ? Math.min(0.28, 0.07 + (level - 4) * 0.015) : 0,
+  boostChance: level >= 7 ? Math.min(0.22, 0.055 + (level - 7) * 0.014) : 0,
+  glitchChance: level >= 11 ? Math.min(0.18, 0.04 + (level - 11) * 0.016) : 0,
   coreMode: level >= 18,
 });
 
