@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useGameStore } from '../../gameStore';
+import { useStore } from '../../store';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
 import { buildRunnerTrack, getRunnerRules, runnerObjectColor } from './runner/runnerConfig';
 import type { RunnerLane, RunnerObject, RunnerState } from './runner/runnerTypes';
+import { drawRunnerScene } from './runner/runnerRenderer';
 
 const LANE_WIDTH = 2.5;
 const CAMERA_HEIGHT = 1.8;
@@ -52,6 +54,7 @@ const isRunnerState = (value: unknown): value is RunnerState => {
 
 export const RunnerGame: React.FC = () => {
   const updateStats = useGameStore(s => s.updateStats);
+  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);
   const state = useRef<RunnerState>(createState(1));
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -224,134 +227,8 @@ export const RunnerGame: React.FC = () => {
   }, [updateStats]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const s = state.current;
-    const p = s.player;
-    const cx = width / 2;
-    const cy = height * 0.48;
-
-    const bg = ctx.createLinearGradient(0, 0, 0, height);
-    bg.addColorStop(0, '#020207');
-    bg.addColorStop(0.45, '#03151d');
-    bg.addColorStop(0.7, '#091018');
-    bg.addColorStop(1, '#050508');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, width, height);
-
-    const project = (x: number, y: number, z: number) => {
-      const relZ = z - (s.distance + CAMERA_Z);
-      if (relZ <= 0.5) return null;
-      const scale = FOCAL_LENGTH / relZ;
-      return {
-        x: cx + x * LANE_WIDTH * scale,
-        y: cy + (CAMERA_HEIGHT - y) * scale * 0.6,
-        scale,
-      };
-    };
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0,243,255,0.18)';
-    ctx.lineWidth = 1;
-    [-1.5, -0.5, 0.5, 1.5].forEach(lane => {
-      const near = project(lane, 0, s.distance + 3);
-      const far = project(lane, 0, s.distance + 180);
-      if (!near || !far) return;
-      ctx.beginPath(); ctx.moveTo(near.x, near.y); ctx.lineTo(far.x, far.y); ctx.stroke();
-    });
-    const gridStart = Math.floor(s.distance / 10) * 10;
-    for (let i = 1; i < 20; i += 1) {
-      const z = gridStart + i * 10;
-      const left = project(-4.5, 0, z);
-      const right = project(4.5, 0, z);
-      if (!left || !right) continue;
-      const alpha = Math.max(0, 1 - (z - s.distance) / 180);
-      ctx.strokeStyle = `rgba(0,243,255,${alpha * 0.16})`;
-      ctx.beginPath(); ctx.moveTo(left.x, left.y); ctx.lineTo(right.x, right.y); ctx.stroke();
-    }
-    ctx.restore();
-
-    for (let i = 0; i < 18; i += 1) {
-      const side = i % 2 ? 1 : -1;
-      const z = s.distance + 10 + i * 11;
-      const base = project(side * 4.1, 0, z);
-      const top = project(side * 4.1, 4.8, z);
-      if (!base || !top) continue;
-      ctx.strokeStyle = `rgba(${side > 0 ? '255,0,85' : '0,243,255'},0.12)`;
-      ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); ctx.stroke();
-    }
-
-    const visible = s.objects
-      .filter(object => !object.collected && object.z > s.distance - 2 && object.z < s.distance + 165)
-      .sort((a, b) => b.z - a.z);
-
-    for (const object of visible) {
-      const pos = project(object.lane, object.yOffset, object.z);
-      if (!pos) continue;
-      const color = runnerObjectColor(object.type);
-      const scale = Math.max(0.2, pos.scale / 100);
-      const ow = 82 * scale;
-      const oh = 84 * scale;
-      ctx.save();
-      ctx.shadowColor = color;
-      ctx.shadowBlur = object.type === 'FINISH' ? 24 : 12;
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.lineWidth = Math.max(1, scale * 1.2);
-
-      if (object.type === 'COIN' || object.type === 'BOOST') {
-        const pulse = 1 + Math.sin(s.elapsed * 8 + object.id) * 0.12;
-        ctx.globalAlpha = 0.9;
-        ctx.beginPath(); ctx.arc(pos.x, pos.y - oh * 0.42, ow * 0.18 * pulse, 0, Math.PI * 2); ctx.stroke();
-        ctx.globalAlpha = 0.18; ctx.fill();
-      } else if (object.type === 'WALL') {
-        ctx.globalAlpha = 0.16; ctx.fillRect(pos.x - ow / 2, pos.y - oh, ow, oh);
-        ctx.globalAlpha = 0.9; ctx.strokeRect(pos.x - ow / 2, pos.y - oh, ow, oh);
-        ctx.beginPath(); ctx.moveTo(pos.x - ow / 2, pos.y - oh); ctx.lineTo(pos.x + ow / 2, pos.y); ctx.stroke();
-      } else if (object.type === 'BEAM') {
-        ctx.globalAlpha = 0.22; ctx.fillRect(pos.x - ow / 2, pos.y - oh * 0.34, ow, oh * 0.24);
-        ctx.globalAlpha = 0.95; ctx.strokeRect(pos.x - ow / 2, pos.y - oh * 0.34, ow, oh * 0.24);
-      } else if (object.type === 'GATE') {
-        ctx.globalAlpha = 0.9;
-        ctx.fillRect(pos.x - ow / 2, pos.y - oh, ow * 0.15, oh);
-        ctx.fillRect(pos.x + ow * 0.35, pos.y - oh, ow * 0.15, oh);
-        ctx.fillRect(pos.x - ow / 2, pos.y - oh, ow, oh * 0.18);
-      } else if (object.type === 'GLITCH') {
-        ctx.globalAlpha = 0.14; ctx.fillRect(pos.x - ow / 2, pos.y - oh, ow, oh);
-        ctx.globalAlpha = 0.9;
-        for (let j = 0; j < 5; j += 1) ctx.fillRect(pos.x - ow / 2 + ((j * 31 + object.id) % 100) / 100 * ow, pos.y - oh + j * oh / 5, ow * 0.32, Math.max(1, scale * 2));
-      } else if (object.type === 'FINISH') {
-        ctx.globalAlpha = 0.16; ctx.fillRect(pos.x - ow * 1.4, pos.y - oh * 3.6, ow * 2.8, oh * 3.6);
-        ctx.globalAlpha = 1; ctx.strokeRect(pos.x - ow * 1.4, pos.y - oh * 3.6, ow * 2.8, oh * 3.6);
-      }
-      ctx.restore();
-    }
-
-    const pp = project(p.x, p.y, s.distance + 3.4);
-    if (pp) {
-      const pw = 42 * pp.scale / 100;
-      const ph = 64 * pp.scale / 100;
-      ctx.save();
-      ctx.translate(pp.x, pp.y);
-      ctx.rotate((p.lane - p.x) * 0.48);
-      const playerColor = s.overdrive > 0 ? '#f3ff00' : '#00f3ff';
-      ctx.shadowColor = playerColor; ctx.shadowBlur = 18; ctx.strokeStyle = playerColor; ctx.fillStyle = playerColor;
-      ctx.globalAlpha = 0.22;
-      const bodyH = p.sliding ? ph * 0.45 : ph;
-      ctx.fillRect(-pw / 2, -bodyH, pw, bodyH);
-      ctx.globalAlpha = 0.95; ctx.strokeRect(-pw / 2, -bodyH, pw, bodyH);
-      ctx.globalAlpha = 0.45;
-      for (let i = 0; i < 4; i += 1) {
-        ctx.beginPath(); ctx.moveTo(-pw * 0.8, -bodyH * 0.3 + i * 4); ctx.lineTo(-pw * 1.8, -bodyH * 0.3 + i * 6); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(pw * 0.8, -bodyH * 0.3 + i * 4); ctx.lineTo(pw * 1.8, -bodyH * 0.3 + i * 6); ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left'; ctx.fillStyle = p.shield < 40 ? '#ff0055' : '#dffcff'; ctx.fillText(`SHIELD ${Math.round(p.shield)}%`, 12, height - 30);
-    ctx.fillStyle = s.overdrive > 0 ? '#f3ff00' : '#00f3ff'; ctx.fillText(`SPEED ${p.speed.toFixed(1)}`, 12, height - 14);
-    ctx.textAlign = 'center'; ctx.fillStyle = s.combo >= 8 ? '#f3ff00' : '#00f3ff'; ctx.fillText(`CHAIN x${s.combo}`, width / 2, height - 14);
-    ctx.textAlign = 'right'; ctx.fillStyle = '#dffcff'; ctx.fillText(`${Math.floor(s.distance)} / ${s.targetDistance}m`, width - 12, height - 14);
-  }, []);
+    drawRunnerScene(ctx, state.current, width, height, { lowPowerMode });
+  }, [lowPowerMode]);
 
   const instructions = useMemo(() => [
     'SWIPE LEFT/RIGHT TO CHANGE LANE. SWIPE UP OR TAP TO JUMP. SWIPE DOWN TO SLIDE.',
