@@ -7,6 +7,7 @@ import {
   createPongState,
   pongModeForLevel,
   pongPaddleWidthForLevel,
+  pongServeSpeedForLevel,
   pongTargetForLevel,
 } from '../engine/games/pong/pongConfig';
 
@@ -19,6 +20,14 @@ describe('SERPENT domain configuration', () => {
     expect(getSnakeProfile(SNAKE_MAX_LEVEL).theme).toBe('CORE');
     expect(snakeLevelTarget(1)).toBe(8);
     expect(snakeLevelTarget(SNAKE_MAX_LEVEL)).toBeLessThanOrEqual(15);
+  });
+
+  it('keeps late-game reaction windows viable for touch input', () => {
+    const finalProfile = getSnakeProfile(SNAKE_MAX_LEVEL);
+    expect(finalProfile.tick).toBeGreaterThanOrEqual(0.076);
+    expect(finalProfile.tick * 0.62).toBeGreaterThanOrEqual(0.047);
+    expect(finalProfile.firewallPeriod).toBeGreaterThanOrEqual(1.8);
+    expect(finalProfile.virusChance).toBeLessThanOrEqual(0.16);
   });
 
   it('keeps the initial spawn corridor free of lethal walls and gates', () => {
@@ -51,5 +60,11 @@ describe('PONG domain configuration', () => {
     expect(state.level).toBe(20);
     expect(state.mode).toBe('CORE');
     expect(state.targetScore).toBe(pongTargetForLevel(20));
+  });
+
+  it('preserves a readable final paddle and bounded opening serve', () => {
+    expect(pongPaddleWidthForLevel(20)).toBeGreaterThanOrEqual(13);
+    expect(pongServeSpeedForLevel(20)).toBeLessThanOrEqual(158);
+    expect(createPongState(20).ball.size).toBeGreaterThanOrEqual(1.5);
   });
 });
