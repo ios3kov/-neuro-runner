@@ -1,157 +1,168 @@
-
-import React, { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useGameStore } from '../gameStore';
 import { GAME_CONFIGS } from '../data/gameConfig';
 import { audio } from '../utils/audio';
-import { LogLevel, JuiceState, LevelResult } from '../types';
+import type { GameProgress, JuiceState, LevelResult } from '../types';
 import { buildCompletedLevelResult } from './core/levelResults';
 import type { GameCoreHandle, GameState, InputState, Particle } from './core/gameTypes';
 import { useGameInput } from './hooks/useGameInput';
 import { useGameLoop } from './hooks/useGameLoop';
+import { GameHud } from './components/GameHud';
+import { GameOverlays } from './components/GameOverlays';
 
 export type { GameCoreHandle, InputState } from './core/gameTypes';
 
 interface GameProps {
   update: (dt: number, input: InputState, juice: GameCoreHandle) => void;
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-  onReset: (startLevel: number) => void; 
+  onReset: (startLevel: number) => void;
   isGameOver: boolean;
   score: number;
   level: number;
-  progress?: number; // 0 to 1
+  progress?: number;
   gameId: string;
   instructions: string[];
-  onSave?: () => string; 
-  onLoad?: (data: string) => void; 
+  onSave?: () => string;
+  onLoad?: (data: string) => void;
 }
 
+const fallbackProgress = (gameId: string): GameProgress => ({
+  levels: {},
+  unlockedLevels: [`${gameId}_1`],
+});
 
-export const GameCore = forwardRef<GameCoreHandle, GameProps>(({ 
-    update, draw, onReset, isGameOver, score, level, progress = 0, gameId, instructions, onSave, onLoad 
+export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
+  update,
+  draw,
+  onReset,
+  isGameOver,
+  score,
+  level: _level,
+  progress = 0,
+  gameId,
+  instructions,
+  onSave: _onSave,
+  onLoad: _onLoad,
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
-  // Core Store for UI/System
-  const stopGame = useStore(s => s.stopGame);
-  const addLog = useStore(s => s.addLog);
-  const toggleSound = useStore(s => s.toggleSound);
-  const soundEnabled = useStore(s => s.user.settings.soundEnabled ?? true);
-  const lowPowerMode = useStore(s => s.user.settings.lowPowerMode ?? false);
-  
-  // Game Store for Progression
-  const submitLevelResult = useGameStore(s => s.submitLevelResult);
-  const gameProgress = useGameStore(s => s.gameProgress);
+  const stopGame = useStore((state) => state.stopGame);
+  const toggleSound = useStore((state) => state.toggleSound);
+  const soundEnabled = useStore((state) => state.user.settings.soundEnabled ?? true);
+  const lowPowerMode = useStore((state) => state.user.settings.lowPowerMode ?? false);
+  const submitLevelResult = useGameStore((state) => state.submitLevelResult);
+  const gameProgress = useGameStore((state) => state.gameProgress);
 
   const [gameState, setGameState] = useState<GameState>('INIT_LOADING');
   const [initLoadProgress, setInitLoadProgress] = useState(0);
   const [selectedLevelIndex, setSelectedLevelIndex] = useState(1);
-  
   const [levelResult, setLevelResult] = useState<LevelResult | null>(null);
   const startTimeRef = useRef(0);
-  
   const juiceRef = useRef<JuiceState>({ shake: 0, chromaticAberration: 0, hitStop: 0 });
   const particlesRef = useRef<Particle[]>([]);
 
   const gameConfig = GAME_CONFIGS[gameId];
-  const userGameProgress = gameProgress[gameId] || { levels: {}, unlockedLevels: [`${gameId}_1`] };
+  const userGameProgress = gameProgress[gameId] ?? fallbackProgress(gameId);
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.hidden) {
-        setGameState((prev) =>
-          prev === 'PLAYING' || prev === 'WAITING_TO_START' ? 'PAUSED' : prev,
-        );
-      }
+      if (!document.hidden) return;
+      setGameState((previous) =>
+        previous === 'PLAYING' || previous === 'WAITING_TO_START' ? 'PAUSED' : previous,
+      );
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
-  const handleStartLevel = (lvlIndex: number) => {
-    const levelId = `${gameId}_${lvlIndex}`;
+  const handleStartLevel = useCallback((levelIndex: number) => {
+    const levelId = `${gameId}_${levelIndex}`;
     const isUnlocked = userGameProgress.unlockedLevels.includes(levelId);
-    
-    if (!isUnlocked && lvlIndex !== 0) { 
-         audio.playError();
-         return;
+    if (!isUnlocked && levelIndex !== 0) {
+      audio.playError();
+      return;
     }
 
     audio.playClick();
-    setSelectedLevelIndex(lvlIndex);
-    onReset(lvlIndex);
-    
-    if (lvlIndex === 0) {
-        setGameState('BRIEFING');
-    } else {
-        setGameState('WAITING_TO_START');
-    }
-  };
+    setSelectedLevelIndex(levelIndex);
+    setLevelResult(null);
+    onReset(levelIndex);
+    setGameState(levelIndex === 0 ? 'BRIEFING' : 'WAITING_TO_START');
+  }, [gameId, onReset, userGameProgress.unlockedLevels]);
 
   const juiceHandle = useMemo<GameCoreHandle>(() => ({
-    addShake: (amount) => { juiceRef.current.shake = Math.min(juiceRef.current.shake + amount, 30); },
-    triggerHitStop: (ms) => { juiceRef.current.hitStop = ms; },
-    addChromatic: (amount) => { juiceRef.current.chromaticAberration = Math.max(juiceRef.current.chromaticAberration, amount); },
-    emitParticles: (x, y, color, count) => {
-         for(let i=0; i<count; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = Math.random() * 120 + 40;
-            particlesRef.current.push({
-                x, y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                life: 1.0 + Math.random() * 0.5,
-                color: color,
-                size: Math.random() * 2 + 1
-            });
-        }
+    addShake: (amount) => {
+      juiceRef.current.shake = Math.min(juiceRef.current.shake + amount, 30);
     },
-    levelUp: (nextLvlNum, metrics = {}) => {
-        const currentLevelId = `${gameId}_${selectedLevelIndex}`;
-        const levelSpec = gameConfig.levels.find(l => l.levelId === currentLevelId);
-        const finalScore = metrics.score !== undefined ? metrics.score : score;
-
-        const result = buildCompletedLevelResult({
-            gameId,
-            levelId: currentLevelId,
-            levelSpec,
-            score: finalScore,
-            metrics,
-            startedAt: startTimeRef.current
+    triggerHitStop: (ms) => {
+      juiceRef.current.hitStop = ms;
+    },
+    addChromatic: (amount) => {
+      juiceRef.current.chromaticAberration = Math.max(juiceRef.current.chromaticAberration, amount);
+    },
+    emitParticles: (x, y, color, count) => {
+      for (let index = 0; index < count; index += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 120 + 40;
+        particlesRef.current.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1 + Math.random() * 0.5,
+          color,
+          size: Math.random() * 2 + 1,
         });
-
-        setLevelResult(result);
-        submitLevelResult(result);
-        setGameState('LEVEL_COMPLETE');
-        audio.playSuccess();
-    }
+      }
+    },
+    levelUp: (_nextLevelNumber, metrics = {}) => {
+      const currentLevelId = `${gameId}_${selectedLevelIndex}`;
+      const levelSpec = gameConfig.levels.find((item) => item.levelId === currentLevelId);
+      const finalScore = metrics.score !== undefined ? metrics.score : score;
+      const result = buildCompletedLevelResult({
+        gameId,
+        levelId: currentLevelId,
+        levelSpec,
+        score: finalScore,
+        metrics,
+        startedAt: startTimeRef.current,
+      });
+      setLevelResult(result);
+      submitLevelResult(result);
+      setGameState('LEVEL_COMPLETE');
+      audio.playSuccess();
+    },
   }), [gameConfig.levels, gameId, score, selectedLevelIndex, submitLevelResult]);
 
   useImperativeHandle(ref, () => juiceHandle, [juiceHandle]);
 
   useEffect(() => {
-    if (gameState === 'INIT_LOADING') {
-      let p = 0;
-      const interval = setInterval(() => {
-        p += Math.random() * 10;
-        if (p >= 100) {
-          p = 100;
-          clearInterval(interval);
-          setTimeout(() => {
-            if (gameConfig.skipLevelSelect) {
-                onReset(1);
-                setGameState('PLAYING');
-                startTimeRef.current = Date.now();
-            } else {
-                setGameState('LEVEL_SELECT');
-            }
-          }, 600);
-        }
-        setInitLoadProgress(p);
-      }, 80);
-      return () => clearInterval(interval);
-    }
-  }, [gameState]);
+    if (gameState !== 'INIT_LOADING') return undefined;
+    let loadProgress = 0;
+    let finishTimer: ReturnType<typeof setTimeout> | undefined;
+    const interval = setInterval(() => {
+      loadProgress += Math.random() * 10;
+      if (loadProgress >= 100) {
+        loadProgress = 100;
+        clearInterval(interval);
+        finishTimer = setTimeout(() => {
+          if (gameConfig.skipLevelSelect) {
+            onReset(1);
+            setGameState('PLAYING');
+            startTimeRef.current = Date.now();
+          } else {
+            setGameState('LEVEL_SELECT');
+          }
+        }, 600);
+      }
+      setInitLoadProgress(loadProgress);
+    }, 80);
+
+    return () => {
+      clearInterval(interval);
+      if (finishTimer) clearTimeout(finishTimer);
+    };
+  }, [gameConfig.skipLevelSelect, gameState, onReset]);
 
   const engage = useCallback(() => {
     setGameState('PLAYING');
@@ -160,9 +171,7 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
   }, []);
 
   const handleEscape = useCallback(() => {
-    setGameState((prev) =>
-      prev === 'PLAYING' ? 'PAUSED' : prev === 'PAUSED' ? 'PLAYING' : prev,
-    );
+    setGameState((previous) => previous === 'PLAYING' ? 'PAUSED' : previous === 'PAUSED' ? 'PLAYING' : previous);
   }, []);
 
   const {
@@ -197,44 +206,34 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
     if (isGameOver) setGameState('GAMEOVER');
   }, [isGameOver]);
 
-  const handleNextLevel = () => {
-      handleStartLevel(selectedLevelIndex + 1);
-  };
+  const exitGame = useCallback(() => {
+    audio.playClick();
+    stopGame();
+  }, [stopGame]);
+
+  const toggleGameSound = useCallback(() => {
+    audio.playClick();
+    toggleSound();
+  }, [toggleSound]);
+
+  const openLevelSelect = useCallback(() => setGameState('LEVEL_SELECT'), []);
+  const initializeBriefing = useCallback(() => {
+    audio.playSuccess();
+    setGameState('WAITING_TO_START');
+  }, []);
+  const resume = useCallback(() => setGameState('PLAYING'), []);
+  const handleNextLevel = useCallback(() => handleStartLevel(selectedLevelIndex + 1), [handleStartLevel, selectedLevelIndex]);
 
   return (
     <div className="absolute inset-0 z-30 bg-black flex flex-col font-mono select-none overflow-hidden" tabIndex={0}>
-        <div className="flex justify-between items-center p-4 bg-black/90 backdrop-blur-xl border-b border-cyan-500/10 z-40 relative">
-            <button 
-                onClick={() => { audio.playClick(); stopGame(); }} 
-                className="text-red-500 font-bold border border-red-900/40 w-10 h-10 flex items-center justify-center hover:bg-red-500 hover:text-black transition-all shrink-0"
-            >
-                ✕
-            </button>
-            <div className="flex flex-col items-center mx-4 w-full">
-                <div className="flex justify-between w-full items-end mb-1">
-                     <div className="text-[10px] text-cyan-800 font-bold tracking-widest uppercase">
-                        LEVEL {selectedLevelIndex}
-                    </div>
-                    <div className="text-cyan-400 font-bold tracking-widest text-lg leading-none neon-text">
-                        {score.toString().padStart(7, '0')}
-                    </div>
-                </div>
-                <div className="w-full h-1 bg-cyan-950/30 relative overflow-hidden">
-                    <div 
-                        className="absolute h-full bg-cyan-400 transition-all duration-300 shadow-[0_0_10px_#00f0ff]"
-                        style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
-                    />
-                </div>
-            </div>
-            <div className="flex gap-3 shrink-0 ml-4">
-                <button 
-                  onClick={() => { audio.playClick(); toggleSound(); }} 
-                  className={`border p-1.5 transition-all flex items-center justify-center w-10 h-10 ${soundEnabled ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/5' : 'text-gray-700 border-gray-900'}`}
-                >
-                    {soundEnabled ? "🔊" : "🔇"}
-                </button>
-            </div>
-        </div>
+      <GameHud
+        level={selectedLevelIndex}
+        score={score}
+        progress={progress}
+        soundEnabled={soundEnabled}
+        onExit={exitGame}
+        onToggleSound={toggleGameSound}
+      />
 
       <canvas
         ref={canvasRef}
@@ -243,192 +242,31 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onMouseDown={() => { if (gameState === 'WAITING_TO_START') engage(); }}
+        onMouseDown={() => {
+          if (gameState === 'WAITING_TO_START') engage();
+        }}
       />
 
-      {gameState === 'INIT_LOADING' && (
-        <div className="absolute inset-0 z-[80] bg-black flex flex-col items-center justify-center p-8 animate-in fade-in duration-300">
-           <div className="text-cyan-400 font-bold text-lg tracking-[0.5em] mb-4 text-center uppercase neon-text animate-pulse">
-               BOOTING {gameId}
-           </div>
-           <div className="relative h-1 w-48 bg-cyan-950/20 mb-2 overflow-hidden border border-cyan-900/30">
-                <div 
-                    className="h-full bg-cyan-400 transition-all duration-75 shadow-[0_0_15px_rgba(0,240,255,1)]"
-                    style={{ width: `${initLoadProgress}%` }}
-                ></div>
-            </div>
-        </div>
-      )}
-
-      {gameState === 'WAITING_TO_START' && (
-          <div 
-            className="absolute inset-0 z-[90] flex items-center justify-center bg-black/30 backdrop-blur-[2px] cursor-pointer"
-            onClick={engage}
-          >
-              <div className="bg-black/80 border border-cyan-500/40 px-8 py-6 cyber-shape flex flex-col items-center animate-pulse">
-                  <div className="text-cyan-400 font-bold tracking-[0.2em] text-sm uppercase mb-2 neon-text">
-                      SYSTEM READY
-                  </div>
-                  <div className="text-[10px] text-cyan-800 font-mono uppercase tracking-widest">
-                      [ TAP SCREEN TO ENGAGE ]
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {gameState === 'LEVEL_SELECT' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/95 z-[60] p-6 backdrop-blur-md animate-in fade-in duration-500">
-              <div className="max-w-xl w-full border border-cyan-500/20 bg-black/80 p-6 md:p-14 shadow-[0_0_100px_rgba(0,240,255,0.1)] relative flex flex-col max-h-[80vh]">
-                  <button 
-                      onClick={() => { audio.playClick(); stopGame(); }}
-                      className="absolute top-4 right-4 text-red-500 font-bold border border-red-900/40 w-10 h-10 flex items-center justify-center hover:bg-red-500 hover:text-black transition-all z-10"
-                  >
-                      ✕
-                  </button>
-                  <h2 className="text-xl md:text-3xl text-cyan-400 font-bold mb-6 tracking-[0.2em] uppercase text-center neon-text">SELECT NODE</h2>
-                  
-                  <div className="grid grid-cols-1 gap-2 overflow-y-auto pr-2 custom-scrollbar">
-                      <button 
-                        onClick={() => handleStartLevel(0)} 
-                        className="group flex justify-between items-center border border-green-500/20 p-4 transition-all text-left hover:bg-green-500/10"
-                      >
-                          <div className="text-green-500 font-bold tracking-widest text-xs">SANDBOX_MODE</div>
-                          <div className="text-green-500 text-[9px] font-bold opacity-50">UNSAFE {'>'}</div>
-                      </button>
-
-                      {gameConfig.levels.map((lvl) => {
-                          const levelId = lvl.levelId;
-                          const prog = userGameProgress.levels[levelId];
-                          const isUnlocked = userGameProgress.unlockedLevels.includes(levelId);
-                          const isCompleted = prog?.state === 'COMPLETED' || prog?.state === 'PERFECT';
-
-                          return (
-                            <button 
-                                key={lvl.levelId} 
-                                disabled={!isUnlocked} 
-                                onClick={() => handleStartLevel(lvl.index)} 
-                                className={`group flex justify-between items-center border p-4 transition-all text-left ${
-                                    !isUnlocked 
-                                        ? 'border-gray-900 opacity-30 cursor-not-allowed bg-black' 
-                                        : isCompleted
-                                            ? 'border-cyan-500/50 bg-cyan-900/10 hover:bg-cyan-900/20'
-                                            : 'border-cyan-500/20 hover:bg-cyan-500/10'
-                                }`}
-                            >
-                                <div>
-                                    <div className={`font-bold tracking-widest text-xs mb-1 ${!isUnlocked ? 'text-gray-600' : 'text-cyan-100'}`}>
-                                        {lvl.name} {isCompleted && '✓'}
-                                    </div>
-                                    <div className="text-[7px] text-cyan-900 uppercase font-black tracking-widest">
-                                        {lvl.difficulty}
-                                        {prog?.bestScore ? ` // HI: ${prog.bestScore}` : ''}
-                                    </div>
-                                </div>
-                                {!isUnlocked && <span className="text-gray-600 text-lg">🔒</span>}
-                                {isUnlocked && !isCompleted && <div className="text-cyan-400 text-[9px] font-bold">START {'>'}</div>}
-                            </button>
-                          );
-                      })}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {gameState === 'BRIEFING' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-50 p-6 animate-in fade-in zoom-in-95 duration-300">
-              <div className="max-w-md w-full border border-cyan-500/30 p-8 md:p-12 bg-black/90 shadow-[0_0_100px_rgba(0,240,255,0.05)] relative overflow-hidden">
-                  <button onClick={() => setGameState('LEVEL_SELECT')} className="absolute top-4 right-4 text-cyan-900 hover:text-cyan-400 transition-all font-bold text-xl">✕</button>
-                  <h2 className="text-2xl text-cyan-400 font-bold mb-8 tracking-[0.2em] text-center uppercase neon-text">MISSION START</h2>
-                  <div className="space-y-4 mb-8 text-[10px] text-cyan-100/70 leading-relaxed font-bold tracking-wider">
-                      {instructions.map((line, i) => (
-                          <div key={i} className="flex gap-4 items-start">
-                              <span className="text-cyan-500 mt-1">{'>'}</span>
-                              <span>{line.toUpperCase()}</span>
-                          </div>
-                      ))}
-                      {gameConfig.levels.find(l => l.index === selectedLevelIndex)?.goals.map(g => (
-                          <div key={g.id} className="flex gap-4 items-start text-white">
-                              <span className="text-green-500 mt-1">Goal:</span>
-                              <span>{g.label}</span>
-                          </div>
-                      ))}
-                  </div>
-                  <button 
-                    onClick={() => { audio.playSuccess(); setGameState('WAITING_TO_START'); }}
-                    className="w-full bg-cyan-500 text-black py-4 hover:bg-white transition-all uppercase tracking-[0.3em] font-black text-xs shadow-[0_0_20px_rgba(0,240,255,0.4)]"
-                  >
-                      INITIALIZE
-                  </button>
-              </div>
-          </div>
-      )}
-
-      {gameState === 'PAUSED' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-[80] backdrop-blur-md animate-in fade-in duration-300">
-              <div className="text-center p-12 border border-yellow-500/20 bg-black shadow-[0_0_80px_rgba(234,179,8,0.05)] relative mx-4">
-                  <button onClick={() => setGameState('LEVEL_SELECT')} className="absolute top-4 right-4 text-yellow-900 hover:text-yellow-500 transition-all font-bold text-xl">✕</button>
-                  <h2 className="text-2xl md:text-4xl text-yellow-400 font-black mb-12 tracking-[0.2em]">SUSPENDED</h2>
-                  <button onClick={() => setGameState('PLAYING')} className="bg-yellow-500 text-black px-8 py-4 font-black uppercase tracking-[0.3em] text-xs hover:bg-white transition-all">RESUME</button>
-              </div>
-          </div>
-      )}
-
-      {gameState === 'LEVEL_COMPLETE' && levelResult && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/95 z-[100] backdrop-blur-3xl animate-in zoom-in-95 duration-500">
-            <div className="w-full max-w-md border-y-4 border-green-500 bg-black p-8 relative flex flex-col items-center">
-                <h2 className="text-3xl md:text-5xl text-green-500 font-black tracking-tighter uppercase mb-2 neon-text text-center">
-                    COMPLETE
-                </h2>
-                <div className="text-green-900 font-bold tracking-[0.5em] text-[8px] mb-8 uppercase">
-                    SECTOR {selectedLevelIndex} SECURED
-                </div>
-
-                <div className="w-full space-y-3 mb-8">
-                     {gameConfig.levels.find(l => l.index === selectedLevelIndex)?.goals.map(g => (
-                         <div key={g.id} className="flex justify-between items-center border-b border-green-900/30 pb-2">
-                             <span className="text-green-100 text-xs tracking-wider">{g.label}</span>
-                             <span className={`${levelResult.goalsCompleted[g.id] ? 'text-green-500' : 'text-gray-600'} font-bold`}>
-                                 {levelResult.goalsCompleted[g.id] ? '[ OK ]' : '[FAIL]'}
-                             </span>
-                         </div>
-                     ))}
-                     <div className="flex justify-between items-center pt-2">
-                         <span className="text-gray-500 text-[10px] uppercase">TOTAL SCORE</span>
-                         <span className="text-green-400 font-mono text-xl">{levelResult.score}</span>
-                     </div>
-                </div>
-
-                <div className="flex gap-4 w-full">
-                    <button 
-                        onClick={() => setGameState('LEVEL_SELECT')} 
-                        className="flex-1 border border-green-900/50 text-green-700 py-4 font-bold text-[10px] tracking-widest hover:bg-green-900/10"
-                    >
-                        MENU
-                    </button>
-                    <button 
-                        onClick={handleNextLevel}
-                        className="flex-[2] bg-green-500 text-black py-4 font-black text-xs tracking-[0.3em] hover:bg-white shadow-[0_0_20px_rgba(34,197,94,0.4)]"
-                    >
-                        NEXT LEVEL
-                    </button>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {gameState === 'GAMEOVER' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/95 z-[100] backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="text-center border border-red-500/40 p-8 md:p-16 bg-black shadow-[0_0_150px_rgba(239,68,68,0.1)] relative mx-4 w-full max-w-lg">
-            <button onClick={() => stopGame()} className="absolute top-4 right-4 text-red-900 hover:text-red-500 transition-all font-bold text-2xl">✕</button>
-            <div className="absolute top-0 left-0 w-full h-1 bg-red-500 shadow-[0_0_20px_#ef4444]"></div>
-            <h2 className="text-4xl md:text-6xl text-red-600 font-black mb-10 tracking-tighter uppercase italic drop-shadow-[0_0_20px_rgba(239,68,68,0.5)]">CRASHED</h2>
-            <div className="space-y-2 mb-12">
-                <p className="text-red-100 font-black tracking-[0.2em] text-sm">FINAL_SCORE: {score}</p>
-            </div>
-            <button onClick={() => handleStartLevel(selectedLevelIndex)} className="bg-red-500 text-black px-12 py-5 hover:bg-white transition-all uppercase tracking-[0.3em] font-black text-xs">RETRY</button>
-          </div>
-        </div>
-      )}
+      <GameOverlays
+        state={gameState}
+        gameId={gameId}
+        initLoadProgress={initLoadProgress}
+        selectedLevelIndex={selectedLevelIndex}
+        score={score}
+        instructions={instructions}
+        gameConfig={gameConfig}
+        gameProgress={userGameProgress}
+        levelResult={levelResult}
+        onEngage={engage}
+        onStartLevel={handleStartLevel}
+        onExit={exitGame}
+        onOpenLevelSelect={openLevelSelect}
+        onInitialize={initializeBriefing}
+        onResume={resume}
+        onNextLevel={handleNextLevel}
+      />
     </div>
   );
 });
+
+GameCore.displayName = 'GameCore';
