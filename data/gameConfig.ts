@@ -8,12 +8,13 @@ const snakeTarget = (level: number) => Math.min(15, 8 + Math.floor((level - 1) /
 const pongTarget = (level: number) => 3 + Math.floor((level - 1) / 5);
 const breakoutRows = (level: number) => Math.min(9, 4 + Math.floor((level - 1) / 2));
 const breakoutTarget = (level: number) => breakoutRows(level) * 8;
+const asteroidsTarget = (level: number) => 12 + Math.floor((level - 1) * 1.8);
 
 const STRATEGIES: Record<string, (l: number) => GoalSpec> = {
   SNAKE: (l) => goal('collect_items', snakeTarget(l), `COLLECT ${snakeTarget(l)} DATA`),
   BREAKOUT: (l) => goal('destroy_targets', breakoutTarget(l), `CLEAR ${breakoutTarget(l)} BLOCKS`),
   DEFENDER: (l) => goal('survive_seconds', 20 + l*5, `SURVIVE ${20+l*5}s`),
-  ASTEROIDS: (l) => goal('score_at_least', l*500, `SCORE ${l*500}`),
+  ASTEROIDS: (l) => goal('destroy_targets', asteroidsTarget(l), `NEUTRALIZE ${asteroidsTarget(l)} THREATS`),
   DRIFT: (l) => goal('finish_level', 1, `SPEED ${20+l*20}`),
   PONG: (l) => goal('finish_level', 1, `WIN FIRST-TO-${pongTarget(l)} DUEL`),
   RUNNER: () => goal('finish_level', 1, 'COMPLETE TRAINING'),

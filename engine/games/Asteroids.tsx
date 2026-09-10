@@ -1,328 +1,379 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { GameCore, InputState, GameCoreHandle } from '../GameCore';
-import { useStore } from '../../store';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useGameStore } from '../../gameStore';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
+import { asteroidColor, asteroidHp, chooseAsteroidKind, getAsteroidsRules, makePolygon } from './asteroids/asteroidsConfig';
+import type { AsteroidEntity, AsteroidsState } from './asteroids/asteroidsTypes';
 
-interface Entity {
-    id: number;
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    size: number;
-    rotation: number;
-    active: boolean;
-    type: 'ASTEROID' | 'BULLET' | 'PLAYER';
-    vertices?: {x: number, y: number}[]; 
-}
+let serial = 1;
+const nextId = () => serial++;
+
+const wrap = (value: number) => value < -5 ? 105 : value > 105 ? -5 : value;
+
+const createState = (level: number): AsteroidsState => {
+  const rules = getAsteroidsRules(level);
+  return {
+    player: { x: 50, y: 52, vx: 0, vy: 0, rotation: -Math.PI / 2, shield: 100, invulnerable: 0 },
+    asteroids: [],
+    bullets: [],
+    score: (level - 1) * 900,
+    level,
+    lives: rules.lives,
+    combo: 0,
+    bestCombo: 0,
+    kills: 0,
+    targetKills: rules.targetKills,
+    spawnTimer: 0.4,
+    shotTimer: 0,
+    elapsed: 0,
+    gameOver: false,
+  };
+};
+
+const isAsteroidsState = (value: unknown): value is AsteroidsState => {
+  if (!value || typeof value !== 'object') return false;
+  const s = value as Partial<AsteroidsState>;
+  return !!s.player && Array.isArray(s.asteroids) && Array.isArray(s.bullets)
+    && typeof s.score === 'number' && typeof s.level === 'number'
+    && typeof s.lives === 'number' && typeof s.kills === 'number'
+    && typeof s.targetKills === 'number' && typeof s.gameOver === 'boolean';
+};
 
 export const AsteroidsGame: React.FC = () => {
-    const updateStats = useGameStore(s => s.updateStats);
-    const [score, setScore] = useState(0);
-    const [level, setLevel] = useState(1);
-    const [gameOver, setGameOver] = useState(false);
-    const [levelProgress, setLevelProgress] = useState(0);
-    
-    const generatePolygon = (radius: number, sides: number) => {
-        const verts = [];
-        for(let i=0; i<sides; i++) {
-            const angle = (i / sides) * Math.PI * 2;
-            const r = radius * (0.8 + Math.random() * 0.4); 
-            verts.push({
-                x: Math.cos(angle) * r,
-                y: Math.sin(angle) * r
-            });
-        }
-        return verts;
-    };
+  const updateStats = useGameStore(s => s.updateStats);
+  const state = useRef<AsteroidsState>(createState(1));
+  const [score, setScore] = useState(0);
+  const [level, setLevel] = useState(1);
+  const [gameOver, setGameOver] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-    const state = useRef({
-        entities: [{
-            id: 0, x: 50, y: 50, vx: 0, vy: 0, 
-            size: 2, rotation: 0, active: true, type: 'PLAYER'
-        }] as Entity[],
-        lastShot: 0,
-        spawnTimer: 0,
-        score: 0,
-        level: 1,
-        gameOver: false
+  const syncUi = (s: AsteroidsState) => {
+    setScore(s.score);
+    setLevel(s.level);
+    setGameOver(s.gameOver);
+    setProgress(s.targetKills > 0 ? s.kills / s.targetKills : 0);
+  };
+
+  const reset = (startLevel = 1) => {
+    state.current = createState(Math.max(1, startLevel || 1));
+    syncUi(state.current);
+  };
+
+  const saveState = () => JSON.stringify(state.current);
+  const loadState = (data: string) => {
+    try {
+      const parsed: unknown = JSON.parse(data);
+      if (!isAsteroidsState(parsed)) return;
+      state.current = parsed;
+      syncUi(parsed);
+    } catch {
+      // Ignore corrupted local saves.
+    }
+  };
+
+  const spawnAsteroid = () => {
+    const s = state.current;
+    const rules = getAsteroidsRules(s.level);
+    const id = nextId();
+    const side = id % 4;
+    const offset = ((id * 29) % 100);
+    const x = side === 1 ? 105 : side === 3 ? -5 : offset;
+    const y = side === 0 ? -5 : side === 2 ? 105 : offset;
+    const kind = chooseAsteroidKind(s.level, id);
+    const baseSize = kind === 'CORE' ? 7.5 : kind === 'MINE' ? 3.2 : 4.3 + (id % 4) * 0.7;
+    const angle = Math.atan2(50 - y, 50 - x) + (((id * 13) % 21) - 10) / 45;
+    const kindSpeed = kind === 'FAST' ? 1.8 : kind === 'MINE' ? 0.75 : kind === 'CORE' ? 0.7 : 1;
+    const speed = (12 + (id % 9) * 1.6) * rules.speedScale * kindSpeed;
+    const hp = asteroidHp(kind);
+    s.asteroids.push({
+      id,
+      kind,
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: baseSize,
+      hp,
+      maxHp: hp,
+      rotation: id * 0.71,
+      spin: ((id % 2 ? 1 : -1) * (0.25 + (id % 5) * 0.08)),
+      vertices: makePolygon(baseSize, id, kind === 'CORE' ? 10 : 7),
+      active: true,
+    });
+  };
+
+  const splitAsteroid = (asteroid: AsteroidEntity) => {
+    const s = state.current;
+    if (asteroid.size < 4.4 || asteroid.kind === 'MINE' || asteroid.kind === 'CORE') return;
+    for (let i = 0; i < 2; i += 1) {
+      const id = nextId();
+      const size = asteroid.size * 0.55;
+      s.asteroids.push({
+        id,
+        kind: 'ROCK',
+        x: asteroid.x,
+        y: asteroid.y,
+        vx: asteroid.vx + (i ? 22 : -22),
+        vy: asteroid.vy + (i ? -16 : 16),
+        size,
+        hp: 1,
+        maxHp: 1,
+        rotation: asteroid.rotation + i,
+        spin: i ? 0.7 : -0.7,
+        vertices: makePolygon(size, id, 6),
+        active: true,
+      });
+    }
+  };
+
+  const destroyAsteroid = (asteroid: AsteroidEntity, juice: GameCoreHandle) => {
+    const s = state.current;
+    asteroid.active = false;
+    s.kills += 1;
+    s.combo += 1;
+    s.bestCombo = Math.max(s.bestCombo, s.combo);
+    const base = asteroid.kind === 'CORE' ? 260 : asteroid.kind === 'ARMORED' ? 110 : asteroid.kind === 'FAST' ? 95 : asteroid.kind === 'MINE' ? 130 : 70;
+    s.score += Math.round(base * (1 + Math.min(2, s.combo * 0.07)));
+    s.player.shield = Math.min(100, s.player.shield + (asteroid.kind === 'CORE' ? 20 : 4));
+
+    const color = asteroidColor(asteroid.kind);
+    audio.playExplosion();
+    haptics.impactMedium();
+    juice.emitParticles(asteroid.x, asteroid.y, color, asteroid.kind === 'CORE' ? 34 : 16);
+    juice.addShake(asteroid.kind === 'CORE' ? 9 : 3);
+    if (asteroid.kind === 'MINE') {
+      juice.addChromatic(14);
+      juice.triggerHitStop(65);
+    }
+    if (asteroid.kind === 'CORE') {
+      juice.addChromatic(18);
+      juice.triggerHitStop(90);
+    }
+    splitAsteroid(asteroid);
+    syncUi(s);
+  };
+
+  const damagePlayer = (juice: GameCoreHandle) => {
+    const s = state.current;
+    if (s.player.invulnerable > 0) return;
+    if (s.player.shield > 0) {
+      s.player.shield = Math.max(0, s.player.shield - 50);
+      s.player.invulnerable = 1.1;
+      s.combo = 0;
+      audio.playError();
+      haptics.notificationWarning();
+      juice.addChromatic(10);
+      juice.addShake(8);
+      return;
+    }
+    s.lives -= 1;
+    s.combo = 0;
+    s.player = { x: 50, y: 52, vx: 0, vy: 0, rotation: -Math.PI / 2, shield: 50, invulnerable: 1.8 };
+    audio.playError();
+    haptics.impactHeavy();
+    juice.addShake(17);
+    juice.addChromatic(16);
+    juice.triggerHitStop(120);
+    juice.emitParticles(50, 52, '#ff0055', 28);
+    if (s.lives <= 0) {
+      s.gameOver = true;
+      updateStats('ASTEROIDS', s.score, s.level);
+      setGameOver(true);
+    }
+  };
+
+  const update = useCallback((dt: number, input: InputState, juice: GameCoreHandle) => {
+    const s = state.current;
+    if (s.gameOver) return;
+    const rules = getAsteroidsRules(s.level);
+    const p = s.player;
+    s.elapsed += dt;
+    s.shotTimer += dt;
+    p.invulnerable = Math.max(0, p.invulnerable - dt);
+
+    const turn = (input.keys.has('ArrowLeft') ? -1 : 0) + (input.keys.has('ArrowRight') ? 1 : 0);
+    p.rotation += turn * dt * 4.3 + input.touchDeltaX * 0.015;
+    const thrusting = input.keys.has('ArrowUp') || (input.isTouching && Math.abs(input.touchDeltaY) > 0.1);
+    if (thrusting) {
+      p.vx += Math.cos(p.rotation) * 31 * dt;
+      p.vy += Math.sin(p.rotation) * 31 * dt;
+      if (Math.random() > 0.45) juice.emitParticles(p.x - Math.cos(p.rotation) * 2.4, p.y - Math.sin(p.rotation) * 2.4, '#00f3ff', 1);
+    }
+    p.vx *= Math.pow(0.985, dt * 60);
+    p.vy *= Math.pow(0.985, dt * 60);
+    const maxSpeed = 38;
+    const velocity = Math.hypot(p.vx, p.vy);
+    if (velocity > maxSpeed) { p.vx = p.vx / velocity * maxSpeed; p.vy = p.vy / velocity * maxSpeed; }
+    p.x = wrap(p.x + p.vx * dt);
+    p.y = wrap(p.y + p.vy * dt);
+
+    if ((input.keys.has('Space') || input.tapDetected || (input.isTouching && s.shotTimer > 0.22)) && s.shotTimer > 0.2) {
+      const speed = 88;
+      s.bullets.push({ id: nextId(), x: p.x + Math.cos(p.rotation) * 2.5, y: p.y + Math.sin(p.rotation) * 2.5, vx: Math.cos(p.rotation) * speed + p.vx * 0.25, vy: Math.sin(p.rotation) * speed + p.vy * 0.25, life: 1.15, active: true });
+      s.shotTimer = 0;
+      audio.playTone(950, 'square', 0.025, 0.05);
+      haptics.impactLight();
+      juice.addShake(0.8);
+    }
+
+    s.spawnTimer -= dt;
+    if (s.spawnTimer <= 0 && s.asteroids.filter(a => a.active).length < 18) {
+      spawnAsteroid();
+      s.spawnTimer = rules.spawnEvery;
+    }
+
+    s.bullets.forEach(bullet => {
+      if (!bullet.active) return;
+      bullet.life -= dt;
+      bullet.x += bullet.vx * dt;
+      bullet.y += bullet.vy * dt;
+      if (bullet.life <= 0 || bullet.x < -3 || bullet.x > 103 || bullet.y < -3 || bullet.y > 103) bullet.active = false;
     });
 
-    const reset = (startLevel: number = 1) => {
-        const lvl = startLevel || 1;
-        state.current = {
-            entities: [{
-                id: 0, x: 50, y: 50, vx: 0, vy: 0, 
-                size: 2, rotation: 0, active: true, type: 'PLAYER'
-            }] as Entity[],
-            lastShot: 0,
-            spawnTimer: 0,
-            score: (lvl - 1) * 500,
-            level: lvl,
-            gameOver: false
-        };
-        setScore(state.current.score);
-        setLevel(lvl);
-        setGameOver(false);
-        setLevelProgress(0);
-    };
+    s.asteroids.forEach(asteroid => {
+      if (!asteroid.active) return;
+      asteroid.x = wrap(asteroid.x + asteroid.vx * dt);
+      asteroid.y = wrap(asteroid.y + asteroid.vy * dt);
+      asteroid.rotation += asteroid.spin * dt;
+      if (asteroid.kind === 'MINE') {
+        const dx = p.x - asteroid.x, dy = p.y - asteroid.y;
+        const d = Math.max(8, Math.hypot(dx, dy));
+        asteroid.vx += dx / d * dt * 3.5;
+        asteroid.vy += dy / d * dt * 3.5;
+      }
+    });
 
-    const saveState = () => JSON.stringify(state.current);
-    const loadState = (data: string) => {
-        try {
-            const loaded = JSON.parse(data);
-            state.current = loaded;
-            setScore(loaded.score);
-            setLevel(loaded.level);
-            setGameOver(loaded.gameOver);
-            setLevelProgress((loaded.score % 500) / 500);
-        } catch(e) {}
-    };
-
-    const update = useCallback((dt: number, input: InputState, juice: GameCoreHandle) => {
-        const s = state.current;
-        if (s.gameOver) return;
-
-        if (Math.floor(s.score / 500) > s.level - 1) {
-            s.level++;
-            setLevel(s.level);
-            juice.levelUp(s.level, { score: s.score });
-            haptics.notificationSuccess();
+    for (const bullet of s.bullets) {
+      if (!bullet.active) continue;
+      for (const asteroid of s.asteroids) {
+        if (!asteroid.active) continue;
+        if (Math.hypot(bullet.x - asteroid.x, bullet.y - asteroid.y) > asteroid.size + 0.8) continue;
+        bullet.active = false;
+        asteroid.hp -= 1;
+        const color = asteroidColor(asteroid.kind);
+        juice.emitParticles(bullet.x, bullet.y, color, 5);
+        if (asteroid.hp <= 0) destroyAsteroid(asteroid, juice);
+        else {
+          audio.playClick();
+          juice.addShake(1.2);
         }
+        break;
+      }
+    }
 
-        const player = s.entities.find(e => e.type === 'PLAYER');
-        if (player) {
-            if (input.keys.has('ArrowLeft')) player.rotation -= 5 * dt;
-            if (input.keys.has('ArrowRight')) player.rotation += 5 * dt;
+    for (const asteroid of s.asteroids) {
+      if (!asteroid.active) continue;
+      if (Math.hypot(p.x - asteroid.x, p.y - asteroid.y) < asteroid.size + 1.6) {
+        asteroid.active = false;
+        damagePlayer(juice);
+        break;
+      }
+    }
 
-            if (input.keys.has('ArrowUp')) {
-                player.vx += Math.cos(player.rotation) * 30 * dt;
-                player.vy += Math.sin(player.rotation) * 30 * dt;
-                if (Math.random() > 0.5) {
-                     juice.emitParticles(player.x, player.y, '#0ff', 1);
-                }
-            }
+    s.bullets = s.bullets.filter(b => b.active);
+    s.asteroids = s.asteroids.filter(a => a.active);
 
-            if (input.isTouching) {
-                player.rotation += input.touchDeltaX * 0.08;
-                if (Math.abs(input.touchDeltaX) > 0.1 || Math.abs(input.touchDeltaY) > 0.1) {
-                    player.vx += Math.cos(player.rotation) * 20 * dt;
-                    player.vy += Math.sin(player.rotation) * 20 * dt;
-                    if (Math.random() > 0.3) juice.emitParticles(player.x, player.y, '#0ff', 1);
-                }
-            }
+    if (s.kills >= s.targetKills) {
+      s.score += s.lives * 300 + s.bestCombo * 55;
+      setScore(s.score);
+      haptics.notificationSuccess();
+      juice.levelUp(s.level + 1, { score: s.score, targetsDestroyed: s.kills, bestCombo: s.bestCombo });
+    }
+  }, [updateStats]);
 
-            player.vx *= 0.98;
-            player.vy *= 0.98;
+  const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const s = state.current;
+    const w = (v: number) => width * v / 100;
+    const h = (v: number) => height * v / 100;
 
-            s.lastShot += dt;
-            if (input.keys.has('Space') || input.tapDetected || (input.isTouching && s.lastShot > 0.25)) {
-                if (s.lastShot > 0.25) {
-                    s.entities.push({
-                        id: Math.random(),
-                        x: player.x + Math.cos(player.rotation) * 3,
-                        y: player.y + Math.sin(player.rotation) * 3,
-                        vx: Math.cos(player.rotation) * 80,
-                        vy: Math.sin(player.rotation) * 80,
-                        size: 0.5,
-                        rotation: player.rotation,
-                        active: true,
-                        type: 'BULLET'
-                    });
-                    s.lastShot = 0;
-                    audio.playClick();
-                    haptics.impactLight();
-                    juice.addShake(1);
-                }
-            }
-        }
+    const bg = ctx.createRadialGradient(width * 0.5, height * 0.45, 0, width * 0.5, height * 0.45, Math.max(width, height) * 0.75);
+    bg.addColorStop(0, 'rgba(0,243,255,0.055)');
+    bg.addColorStop(0.55, 'rgba(5,5,8,0.015)');
+    bg.addColorStop(1, 'rgba(255,0,85,0.045)');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
 
-        s.spawnTimer -= dt;
-        if (s.spawnTimer <= 0) {
-            const side = Math.floor(Math.random() * 4);
-            let startX = 0, startY = 0;
-            if (side === 0) { startX = Math.random() * 100; startY = -5; }
-            if (side === 1) { startX = 105; startY = Math.random() * 100; }
-            if (side === 2) { startX = Math.random() * 100; startY = 105; }
-            if (side === 3) { startX = -5; startY = Math.random() * 100; }
+    ctx.fillStyle = 'rgba(0,243,255,0.18)';
+    for (let i = 0; i < 38; i += 1) {
+      const x = ((i * 37 + s.level * 11) % 100) / 100 * width;
+      const y = ((i * 61 + Math.floor(s.elapsed * 3)) % 100) / 100 * height;
+      ctx.fillRect(x, y, i % 7 === 0 ? 2 : 1, i % 7 === 0 ? 2 : 1);
+    }
 
-            const angle = Math.atan2(50 - startY, 50 - startX) + (Math.random() - 0.5);
-            const speed = (10 + Math.random() * 20) * (1 + s.level * 0.1);
+    s.asteroids.forEach(asteroid => {
+      const color = asteroidColor(asteroid.kind);
+      ctx.save();
+      ctx.translate(w(asteroid.x), h(asteroid.y));
+      ctx.rotate(asteroid.rotation);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = asteroid.kind === 'CORE' ? 18 : 8;
+      ctx.lineWidth = asteroid.kind === 'CORE' ? 2.4 : 1.4;
+      ctx.beginPath();
+      asteroid.vertices.forEach((point, index) => {
+        const px = w(point.x), py = w(point.y);
+        if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.globalAlpha = 0.16; ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.stroke();
+      if (asteroid.maxHp > 1) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillRect(-w(asteroid.size), w(asteroid.size + 1.2), w(asteroid.size * 2 * asteroid.hp / asteroid.maxHp), 1.5);
+      }
+      if (asteroid.kind === 'MINE') {
+        ctx.globalAlpha = 0.4 + Math.sin(s.elapsed * 10) * 0.2;
+        ctx.beginPath(); ctx.arc(0, 0, w(asteroid.size * 1.45), 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    });
 
-            s.entities.push({
-                id: Math.random(),
-                x: startX, y: startY,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                size: 4 + Math.random() * 3,
-                rotation: Math.random() * Math.PI * 2,
-                active: true,
-                type: 'ASTEROID',
-                vertices: generatePolygon(4 + Math.random() * 3, 6)
-            });
-            s.spawnTimer = Math.max(0.5, 2 - (s.level * 0.1)); 
-        }
+    s.bullets.forEach(bullet => {
+      ctx.save(); ctx.fillStyle = '#fff'; ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(w(bullet.x), h(bullet.y), w(0.32), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    });
 
-        s.entities.forEach(e => {
-            if (!e.active) return;
-            e.x += e.vx * dt;
-            e.y += e.vy * dt;
+    const p = s.player;
+    ctx.save();
+    ctx.translate(w(p.x), h(p.y));
+    ctx.rotate(p.rotation);
+    const blink = p.invulnerable > 0 && Math.floor(s.elapsed * 14) % 2 === 0;
+    ctx.globalAlpha = blink ? 0.25 : 1;
+    ctx.strokeStyle = '#00f3ff'; ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 16; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(w(2.2), 0); ctx.lineTo(w(-1.4), w(1.4)); ctx.lineTo(w(-0.65), 0); ctx.lineTo(w(-1.4), w(-1.4)); ctx.closePath(); ctx.stroke();
+    if (p.shield > 0) {
+      ctx.globalAlpha = 0.18 + p.shield / 100 * 0.25;
+      ctx.beginPath(); ctx.arc(0, 0, w(3.1), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
 
-            if (e.x < -5) e.x = 105;
-            if (e.x > 105) e.x = -5;
-            if (e.y < -5) e.y = 105;
-            if (e.y > 105) e.y = -5;
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'left'; ctx.fillStyle = '#dffcff'; ctx.fillText(`HULL ${s.lives}`, w(2), h(97));
+    ctx.fillStyle = '#00f3ff'; ctx.fillText(`SHIELD ${Math.round(p.shield)}%`, w(2), h(99.5));
+    ctx.textAlign = 'center'; ctx.fillStyle = s.combo >= 8 ? '#f3ff00' : '#00f3ff'; ctx.fillText(`CHAIN x${s.combo}`, width / 2, h(98.2));
+    ctx.textAlign = 'right'; ctx.fillStyle = '#dffcff'; ctx.fillText(`THREATS ${Math.max(0, s.targetKills - s.kills)}`, w(98), h(98.2));
+  }, []);
 
-            if (e.type === 'BULLET') {
-                if (e.x <= 0 || e.x >= 100 || e.y <= 0 || e.y >= 100) e.active = false;
-            }
-        });
+  const instructions = useMemo(() => [
+    'ROTATE WITH LEFT/RIGHT OR HORIZONTAL TOUCH. THRUST WITH UP/DRAG.',
+    'FIRE WITH SPACE OR TAP. DESTROY THE REQUIRED THREAT COUNT.',
+    'YELLOW: FAST // VIOLET: ARMORED // RED: HOMING MINE // WHITE: CORE.',
+    'SHIELD ABSORBS DAMAGE AND RECHARGES FROM KILLS. BUILD CHAIN FOR SCORE.',
+    'LATE NODES MIX ALL THREAT TYPES AT HIGHER SPEED.',
+  ], []);
 
-        const bullets = s.entities.filter(e => e.type === 'BULLET' && e.active);
-        const asteroids = s.entities.filter(e => e.type === 'ASTEROID' && e.active);
-        
-        if (player) {
-            for (const ast of asteroids) {
-                const dist = Math.hypot(player.x - ast.x, player.y - ast.y);
-                if (dist < player.size + ast.size) {
-                    s.gameOver = true;
-                    setGameOver(true);
-                    updateStats('ASTEROIDS', s.score, s.level);
-                    audio.playError();
-                    haptics.impactHeavy();
-                    juice.addShake(15);
-                    juice.addChromatic(10);
-                    juice.emitParticles(player.x, player.y, '#f00', 30);
-                    juice.triggerHitStop(100);
-                }
-            }
-        }
-
-        for (const bullet of bullets) {
-            for (const ast of asteroids) {
-                if (!bullet.active || !ast.active) continue;
-                const dist = Math.hypot(bullet.x - ast.x, bullet.y - ast.y);
-                if (dist < bullet.size + ast.size) {
-                    bullet.active = false;
-                    ast.active = false;
-                    s.score += 10;
-                    setScore(s.score);
-                    
-                    // Update Progress
-                    setLevelProgress((s.score % 500) / 500);
-
-                    audio.playExplosion();
-                    haptics.impactMedium();
-                    juice.addShake(3);
-                    juice.emitParticles(ast.x, ast.y, '#f05', 10);
-                    
-                    if (ast.size > 2) {
-                        for(let i=0; i<2; i++) {
-                            const newSize = ast.size / 1.5;
-                            s.entities.push({
-                                id: Math.random(),
-                                x: ast.x, y: ast.y,
-                                vx: ast.vx + (Math.random() - 0.5) * 30,
-                                vy: ast.vy + (Math.random() - 0.5) * 30,
-                                size: newSize,
-                                rotation: Math.random() * Math.PI,
-                                active: true,
-                                type: 'ASTEROID',
-                                vertices: generatePolygon(newSize, 5)
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        s.entities = s.entities.filter(e => e.active);
-
-    }, [updateStats]);
-
-    // ... (Draw remains same) ...
-    const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-        const s = state.current;
-        const w = (val: number) => (val / 100) * width;
-        const h = (val: number) => (val / 100) * height;
-
-        s.entities.forEach(e => {
-            if (!e.active) return;
-            
-            ctx.save();
-            ctx.translate(w(e.x), h(e.y));
-            ctx.rotate(e.rotation);
-
-            if (e.type === 'PLAYER') {
-                ctx.strokeStyle = '#0ff';
-                ctx.lineWidth = 2;
-                ctx.shadowColor = '#0ff';
-                ctx.shadowBlur = 15;
-                ctx.beginPath();
-                ctx.moveTo(w(1.5), 0);
-                ctx.lineTo(w(-1), w(1));
-                ctx.lineTo(w(-0.5), 0);
-                ctx.lineTo(w(-1), w(-1));
-                ctx.closePath();
-                ctx.stroke();
-                
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(-1, -1, 2, 2);
-
-            } else if (e.type === 'ASTEROID') {
-                ctx.strokeStyle = '#f05';
-                ctx.lineWidth = 2;
-                ctx.shadowColor = '#f05';
-                ctx.shadowBlur = 5;
-                
-                if (e.vertices) {
-                    ctx.beginPath();
-                    const v0 = e.vertices[0];
-                    ctx.moveTo(w(v0.x/3), w(v0.y/3)); 
-                    for(let i=1; i<e.vertices.length; i++) {
-                        ctx.lineTo(w(e.vertices[i].x/3), w(e.vertices[i].y/3));
-                    }
-                    ctx.closePath();
-                    ctx.stroke();
-                    
-                    ctx.fillStyle = '#fff';
-                    for(let i=0; i<e.vertices.length; i++) {
-                         ctx.fillRect(w(e.vertices[i].x/3) - 1, w(e.vertices[i].y/3) - 1, 2, 2);
-                    }
-                }
-
-            } else if (e.type === 'BULLET') {
-                ctx.fillStyle = '#fff';
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = '#fff';
-                ctx.fillRect(-w(1), -w(0.2), w(2), w(0.4));
-            }
-
-            ctx.restore();
-        });
-    }, []);
-
-    const instructions = [
-        "ROTATE SHIP: LEFT/RIGHT ARROWS OR TOUCH DRAG.",
-        "THRUST: UP ARROW.",
-        "FIRE: SPACE OR TAP.",
-        "SURVIVE THE ASTEROID FIELD.",
-        "LEVEL UP EVERY 500 POINTS."
-    ];
-
-    return <GameCore 
-        gameId="ASTEROIDS"
-        update={update} 
-        draw={draw} 
-        onReset={reset} 
-        isGameOver={gameOver} 
-        score={score}
-        level={level}
-        progress={levelProgress}
-        instructions={instructions}
-        onSave={saveState}
-        onLoad={loadState}
-    />;
+  return <GameCore
+    gameId="ASTEROIDS"
+    update={update}
+    draw={draw}
+    onReset={reset}
+    isGameOver={gameOver}
+    score={score}
+    level={level}
+    progress={progress}
+    instructions={instructions}
+    onSave={saveState}
+    onLoad={loadState}
+  />;
 };
