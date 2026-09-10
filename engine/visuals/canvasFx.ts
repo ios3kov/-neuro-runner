@@ -152,11 +152,20 @@ export const drawGlobalGameFx = (
     ctx.stroke();
   });
 
-  ctx.globalAlpha = 0.35 * intensity;
-  ctx.font = `bold ${Math.max(8, Math.floor(Math.min(width, height) * 0.015))}px monospace`;
+  const labelFontSize = Math.max(8, Math.floor(Math.min(width, height) * 0.015));
+  const nodeLabel = `${art.label} // NODE ${String(Math.max(1, level)).padStart(2, '0')}`;
+  ctx.font = `bold ${labelFontSize}px monospace`;
   ctx.textAlign = 'left';
+  const labelWidth = ctx.measureText(nodeLabel).width + 12;
+  const labelHeight = labelFontSize + 10;
+  ctx.globalAlpha = 0.42 * intensity;
+  ctx.fillStyle = 'rgba(0,0,0,0.58)';
+  ctx.fillRect(pad, pad, labelWidth, labelHeight);
+  ctx.globalAlpha = 0.72 * intensity;
+  ctx.strokeStyle = hexToRgba(art.primary, 0.46);
+  ctx.strokeRect(pad + 0.5, pad + 0.5, labelWidth - 1, labelHeight - 1);
   ctx.fillStyle = art.accent;
-  ctx.fillText(`${art.label} // NODE ${String(Math.max(1, level)).padStart(2, '0')}`, pad + 4, height - pad - 5);
+  ctx.fillText(nodeLabel, pad + 6, pad + labelFontSize + 4);
 
   if (!lowPowerMode) {
     ctx.globalAlpha = 0.03 * intensity;
