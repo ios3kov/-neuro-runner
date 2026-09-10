@@ -56,3 +56,6 @@ export const generateRuntimeId = (): string =>
 
 export const formatLogTimestamp = (): string =>
   new Date().toLocaleTimeString('en-US', { hour12: false });
+
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
