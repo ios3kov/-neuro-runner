@@ -10,6 +10,7 @@ const f = (id: string, name: string, desc: string, gameId?: GameId, rest: Partia
 
 export const fileSystemData: FileNode = d('root', 'ROOT', [
   d('arcade', 'ARCADE', [
+    f('battle', 'BATTLE.EXE', 'Original Naval Battle', 'BATTLE'),
     f('crosswire', 'CROSSWIRE.EXE', 'Grid Crossing', 'CROSSWIRE'),
     f('vapor', 'VAPORWARE.EXE', 'Loading Sim', 'VAPORWARE'),
     f('run', 'AERO_RUN.EXE', 'Training Sim', 'RUNNER'),
@@ -83,7 +84,7 @@ const ICONS: Record<string, string> = {
   epstein: '✈️', RUNNER: '🏃', VAPORWARE: '⌛', CROSSWIRE: '⬆️',
   downloads: '📥', blueprint: '📐', music: '🎵',
   BREAKOUT: '🧱', SNAKE: '🐍', PONG: '🏓', ASTEROIDS: '☄️',
-  DRIFT: '🏎️', DEFENDER: '🛡️'
+  DRIFT: '🏎️', DEFENDER: '🛡️', BATTLE: '⚓'
 };
 
 export const getIcon = (node: FileNode & { isParentLink?: boolean }) => {
