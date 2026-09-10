@@ -14,19 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Restore source
+      - name: Restore exact source
         shell: bash
         run: |
-          base64 -d source/archive.b64 > /tmp/source.tar.xz
+          cat .bootstrap/source.part00 .bootstrap/source.part01 .bootstrap/source.part02 .bootstrap/source.part03 .bootstrap/source.part04 .bootstrap/source.part05 .bootstrap/source.part06 .bootstrap/source.part07 .bootstrap/source.part08 .bootstrap/source.part09 .bootstrap/source.part10 .bootstrap/source.part11 > /tmp/source.b64
+          test "$(wc -c < /tmp/source.b64)" -eq 94152
+          base64 -d /tmp/source.b64 > /tmp/source.tar.xz
+          xz -t /tmp/source.tar.xz
+          tar -tJf /tmp/source.tar.xz >/dev/null
           tar -xJf /tmp/source.tar.xz -C .
-          rm -rf source
+          rm -rf .bootstrap
           rm -f cloudflare-build.sh
           rm -f .github/workflows/bootstrap-source.yml
-      - name: Commit source
+      - name: Commit exact refactored source
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Import refactored Neuro Runner source'
+          git commit -m 'Import exact refactored Neuro Runner source'
           git push
