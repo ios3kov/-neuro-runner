@@ -51,6 +51,32 @@ jobs:
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a /tmp/refactor/. .
 
+      - name: Apply verification fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('components/AiChat.tsx')
+          s = p.read_text()
+          s = s.replace("const omniIteration = useStore((s) => s.omniIteration);", "const omniIteration = useStore((s) => s.user.omniIteration);")
+          p.write_text(s)
+
+          p = Path('components/SettingsTool.tsx')
+          s = p.read_text()
+          s = s.replace("const settings = useStore((s) => s.user.settings);", "const userSettings = useStore((s) => s.user.settings);")
+          s = s.replace("  const settings = [", "  const settingItems = [")
+          s = s.replace("active: settings.soundEnabled", "active: userSettings.soundEnabled")
+          s = s.replace("active: settings.musicEnabled", "active: userSettings.musicEnabled")
+          s = s.replace("active: settings.showHidden", "active: userSettings.showHidden")
+          s = s.replace("active: settings.hapticsEnabled", "active: userSettings.hapticsEnabled")
+          s = s.replace("active: settings.lowPowerMode", "active: userSettings.lowPowerMode")
+          s = s.replace("settings[index].action()", "settingItems[index].action()")
+          s = s.replace("settings.length", "settingItems.length")
+          s = s.replace("[focusedIndex, settings]", "[focusedIndex, settingItems]")
+          s = s.replace("{settings.map((item, index) => (", "{settingItems.map((item, index) => (")
+          p.write_text(s)
+          PY
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
