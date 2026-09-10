@@ -31,20 +31,16 @@ export const getSnakeProfile = (level: number): SnakeLevelProfile => {
     level: safeLevel,
     theme,
     target: snakeLevelTarget(safeLevel),
-    // Keep late nodes demanding without dropping below a practical touch reaction window.
-    tick: Math.max(0.068, 0.128 - (safeLevel - 1) * 0.0025),
-    // Active firewall phases remain readable on smaller phone screens.
+    // The floor deliberately preserves a usable swipe reaction window even when
+    // OVERCLOCK applies the game's existing 0.62 speed multiplier.
+    tick: Math.max(0.076, 0.13 - (safeLevel - 1) * 0.00225),
+    // Firewall state changes stay readable on compact phone canvases.
     firewallPeriod: Math.max(1.8, 3.55 - safeLevel * 0.065),
     virusChance: safeLevel < 7 ? 0 : Math.min(0.16, 0.055 + (safeLevel - 7) * 0.0055),
     zipChance: safeLevel < 13 ? 0 : Math.min(0.12, 0.05 + (safeLevel - 13) * 0.004),
     twoFactor: safeLevel >= 16,
     label: labels[theme],
   };
-};
-
-export const getSnakeEffectiveTick = (level: number, inOverclock: boolean) => {
-  const tick = getSnakeProfile(level).tick;
-  return tick * (inOverclock ? 0.72 : 1);
 };
 
 export const createInitialSnakeState = (): SnakeState => ({
