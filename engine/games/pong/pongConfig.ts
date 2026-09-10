@@ -2,7 +2,7 @@ import type { ArenaMode, Barrier, PongState } from './pongTypes';
 
 export const clampPong = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-export const pongTargetForLevel = (level: number) => 3 + Math.floor((level - 1) / 5);
+export const pongTargetForLevel = (level: number) => Math.min(5, 3 + Math.floor((level - 1) / 5));
 
 export const pongModeForLevel = (level: number): ArenaMode => {
   if (level <= 3) return 'CLASSIC';
