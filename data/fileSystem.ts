@@ -10,6 +10,8 @@ const f = (id: string, name: string, desc: string, gameId?: GameId, rest: Partia
 
 export const fileSystemData: FileNode = d('root', 'ROOT', [
   d('arcade', 'ARCADE', [
+    f('lunar_lem', 'LUNAR_LEM.EXE', 'Original Lunar LEM Rocket', 'LUNAR_LEM'),
+    f('flip_flop', 'FLIP_FLOP.EXE', 'Original Flip Flop', 'FLIP_FLOP'),
     f('battle', 'BATTLE.EXE', 'Original Naval Battle', 'BATTLE'),
     f('crosswire', 'CROSSWIRE.EXE', 'Grid Crossing', 'CROSSWIRE'),
     f('vapor', 'VAPORWARE.EXE', 'Loading Sim', 'VAPORWARE'),
@@ -84,7 +86,7 @@ const ICONS: Record<string, string> = {
   epstein: '✈️', RUNNER: '🏃', VAPORWARE: '⌛', CROSSWIRE: '⬆️',
   downloads: '📥', blueprint: '📐', music: '🎵',
   BREAKOUT: '🧱', SNAKE: '🐍', PONG: '🏓', ASTEROIDS: '☄️',
-  DRIFT: '🏎️', DEFENDER: '🛡️', BATTLE: '⚓'
+  DRIFT: '🏎️', DEFENDER: '🛡️', BATTLE: '⚓', LUNAR_LEM: '🚀', FLIP_FLOP: '🔀'
 };
 
 export const getIcon = (node: FileNode & { isParentLink?: boolean }) => {
