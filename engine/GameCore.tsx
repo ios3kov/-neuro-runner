@@ -194,6 +194,8 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
     juiceRef,
     particlesRef,
     gameState,
+    gameId,
+    level: Math.max(1, selectedLevelIndex || _level || 1),
     lowPowerMode,
     update,
     draw,

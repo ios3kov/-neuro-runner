@@ -4,7 +4,7 @@ import { useStore } from '../../store';
 import { syncCanvasViewport } from '../core/canvasViewport';
 import type { GameCoreHandle, GameState, InputState, Particle } from '../core/gameTypes';
 import type { JuiceState } from '../../types';
-import { drawGlobalGameFx } from '../visuals/canvasFx';
+import { drawGlobalGameBackdrop, drawGlobalGameFx } from '../visuals/canvasFx';
 
 interface UseGameLoopOptions {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -12,6 +12,8 @@ interface UseGameLoopOptions {
   juiceRef: React.MutableRefObject<JuiceState>;
   particlesRef: React.MutableRefObject<Particle[]>;
   gameState: GameState;
+  gameId: string;
+  level: number;
   lowPowerMode: boolean;
   update: (dt: number, input: InputState, juice: GameCoreHandle) => void;
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
@@ -26,6 +28,8 @@ export const useGameLoop = ({
   juiceRef,
   particlesRef,
   gameState,
+  gameId,
+  level,
   lowPowerMode,
   update,
   draw,
@@ -86,6 +90,14 @@ export const useGameLoop = ({
           ctx.fillStyle = '#030303';
           ctx.fillRect(0, 0, width, height);
 
+          drawGlobalGameBackdrop(ctx, width, height, {
+            time: visualTime,
+            lowPowerMode,
+            intensity: gameState === 'PLAYING' ? 1 : 0.72,
+            gameId,
+            level,
+          });
+
           if (juiceRef.current.shake > 0) {
             const dx = (Math.random() - 0.5) * juiceRef.current.shake;
             const dy = (Math.random() - 0.5) * juiceRef.current.shake;
@@ -116,6 +128,8 @@ export const useGameLoop = ({
             time: visualTime,
             lowPowerMode,
             intensity: gameState === 'PLAYING' ? 1 : 0.72,
+            gameId,
+            level,
           });
           ctx.restore();
         }
@@ -131,10 +145,12 @@ export const useGameLoop = ({
     canvasRef,
     clearAllInput,
     draw,
+    gameId,
     gameState,
     inputRef,
     juiceHandle,
     juiceRef,
+    level,
     lowPowerMode,
     particlesRef,
     resetTransientInput,
