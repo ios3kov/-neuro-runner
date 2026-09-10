@@ -31,9 +31,12 @@ export const getSnakeProfile = (level: number): SnakeLevelProfile => {
     level: safeLevel,
     theme,
     target: snakeLevelTarget(safeLevel),
-    tick: Math.max(0.058, 0.125 - (safeLevel - 1) * 0.0027),
-    firewallPeriod: Math.max(1.25, 3.4 - safeLevel * 0.075),
-    virusChance: safeLevel < 7 ? 0 : Math.min(0.18, 0.06 + (safeLevel - 7) * 0.006),
+    // The floor deliberately preserves a usable swipe reaction window even when
+    // OVERCLOCK applies the game's existing 0.62 speed multiplier.
+    tick: Math.max(0.076, 0.13 - (safeLevel - 1) * 0.00225),
+    // Firewall state changes stay readable on compact phone canvases.
+    firewallPeriod: Math.max(1.8, 3.55 - safeLevel * 0.065),
+    virusChance: safeLevel < 7 ? 0 : Math.min(0.16, 0.055 + (safeLevel - 7) * 0.0055),
     zipChance: safeLevel < 13 ? 0 : Math.min(0.12, 0.05 + (safeLevel - 13) * 0.004),
     twoFactor: safeLevel >= 16,
     label: labels[theme],
