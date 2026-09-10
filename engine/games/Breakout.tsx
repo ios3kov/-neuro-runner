@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useGameStore } from '../../gameStore';
+import { useStore } from '../../store';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
 import { blockColor, createBreakoutBlocks, getBreakoutRules } from './breakout/breakoutConfig';
 import type { BreakoutBall, BreakoutBlock, BreakoutState } from './breakout/breakoutTypes';
+import { drawBreakoutScene } from './breakout/breakoutRenderer';
 
 const makeBall = (level: number, direction = -1, x = 50): BreakoutBall => {
   const speed = getBreakoutRules(level).ballSpeed;
@@ -51,6 +53,7 @@ const isBreakoutState = (value: unknown): value is BreakoutState => {
 
 export const BreakoutGame: React.FC = () => {
   const updateStats = useGameStore(s => s.updateStats);
+  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);
   const state = useRef<BreakoutState>(createState(1));
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -263,84 +266,8 @@ export const BreakoutGame: React.FC = () => {
   }, [updateStats]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const s = state.current;
-    const w = (v: number) => width * v / 100;
-    const h = (v: number) => height * v / 100;
-
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, 'rgba(0,243,255,0.06)');
-    gradient.addColorStop(0.55, 'rgba(5,5,8,0.02)');
-    gradient.addColorStop(1, 'rgba(255,0,85,0.05)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.strokeStyle = 'rgba(0,243,255,0.055)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < 100; x += 5) { ctx.beginPath(); ctx.moveTo(w(x), 0); ctx.lineTo(w(x), height); ctx.stroke(); }
-    for (let y = 0; y < 100; y += 5) { ctx.beginPath(); ctx.moveTo(0, h(y)); ctx.lineTo(width, h(y)); ctx.stroke(); }
-
-    for (const block of s.blocks) {
-      if (!block.active) continue;
-      const color = blockColor(block.kind);
-      const pulse = 0.65 + Math.sin(s.elapsed * 4 + block.phase) * 0.2;
-      const bx = w(block.x), by = h(block.y), bw = w(block.w), bh = h(block.h);
-      ctx.save();
-      ctx.shadowColor = color;
-      ctx.shadowBlur = block.kind === 'CORE' ? 18 : 9;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = block.kind === 'CORE' ? 2.5 : 1.4;
-      ctx.globalAlpha = pulse;
-      ctx.strokeRect(bx, by, bw, bh);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.08 + 0.13 * (block.hp / block.maxHp);
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.globalAlpha = 0.55;
-      ctx.fillRect(bx + 2, by + 2, Math.max(0, (bw - 4) * block.hp / block.maxHp), 1.5);
-      if (block.kind === 'SHIELD') {
-        ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.25; ctx.strokeRect(bx + 3, by + 3, bw - 6, bh - 6);
-      }
-      if (block.kind === 'CORRUPT') {
-        ctx.globalAlpha = 0.4;
-        ctx.fillRect(bx + ((Math.sin(s.elapsed * 13 + block.phase) + 1) * 0.5) * Math.max(1, bw - 4), by, 2, bh);
-      }
-      ctx.restore();
-    }
-
-    for (const ball of s.balls) {
-      if (!ball.active) continue;
-      ball.trail.forEach((trail, index) => {
-        ctx.fillStyle = `rgba(0,243,255,${trail.alpha * (index / Math.max(1, ball.trail.length)) * 0.45})`;
-        ctx.beginPath(); ctx.arc(w(trail.x), h(trail.y), w(0.25 + index * 0.025), 0, Math.PI * 2); ctx.fill();
-      });
-      ctx.save();
-      ctx.shadowColor = s.paddle.overdrive > 0 ? '#f3ff00' : '#ffffff';
-      ctx.shadowBlur = 18;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(w(ball.x), h(ball.y), w(ball.radius), 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
-
-    ctx.save();
-    const paddleColor = s.paddle.overdrive > 0 ? '#f3ff00' : '#00f3ff';
-    ctx.shadowColor = paddleColor; ctx.shadowBlur = 18; ctx.fillStyle = paddleColor;
-    ctx.fillRect(w(s.paddle.x), h(90), w(s.paddle.w), h(1.8));
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.7; ctx.fillRect(w(s.paddle.x + 1), h(90.45), w(Math.max(0, s.paddle.w - 2)), h(0.28));
-    ctx.restore();
-
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(w(2), h(94.5), w(34), h(3));
-    ctx.strokeStyle = '#00f3ff'; ctx.strokeRect(w(2), h(94.5), w(34), h(3));
-    ctx.fillStyle = s.paddle.energy >= 100 ? '#f3ff00' : '#00f3ff';
-    ctx.fillRect(w(2), h(94.5), w(34 * s.paddle.energy / 100), h(3));
-
-    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#dffcff';
-    ctx.fillText(`LIVES ${s.lives}`, w(2), h(99));
-    ctx.textAlign = 'center'; ctx.fillStyle = s.combo >= 8 ? '#f3ff00' : '#00f3ff';
-    ctx.fillText(`COMBO x${s.combo}`, width / 2, h(99));
-    ctx.textAlign = 'right'; ctx.fillStyle = '#dffcff';
-    ctx.fillText(`BLOCKS ${s.targetDestroyed - s.destroyedCount}`, w(98), h(99));
-
-    if (s.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${s.flash * 0.16})`; ctx.fillRect(0, 0, width, height); }
-  }, []);
+    drawBreakoutScene(ctx, state.current, width, height, { lowPowerMode });
+  }, [lowPowerMode]);
 
   const instructions = useMemo(() => [
     'BREAK THE DATA WALL. CLEAR EVERY ACTIVE BLOCK.',
