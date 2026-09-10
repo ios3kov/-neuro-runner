@@ -63,10 +63,10 @@ const drawSpaceField = (ctx: CanvasRenderingContext2D, state: AsteroidsState, wi
   }
 };
 
-const drawAsteroid = (ctx: CanvasRenderingContext2D, state: AsteroidsState, asteroid: AsteroidEntity, width: number, lowPowerMode: boolean): void => {
+const drawAsteroid = (ctx: CanvasRenderingContext2D, state: AsteroidsState, asteroid: AsteroidEntity, width: number, height: number, lowPowerMode: boolean): void => {
   const style = kindStyle[asteroid.kind];
   const px = width * asteroid.x / 100;
-  const pyScale = width / 100;
+  const pyScale = height / 100;
   ctx.save();
   ctx.translate(px, 0);
   ctx.translate(0, asteroid.y * pyScale);
@@ -132,7 +132,7 @@ export const drawAsteroidsScene = (ctx: CanvasRenderingContext2D, state: Asteroi
   const sy = (v: number) => height * v / 100;
   drawSpaceField(ctx, state, width, height, lowPowerMode);
 
-  state.asteroids.forEach(a => { if (a.active) drawAsteroid(ctx, state, a, width, lowPowerMode); });
+  state.asteroids.forEach(a => { if (a.active) drawAsteroid(ctx, state, a, width, height, lowPowerMode); });
 
   state.bullets.forEach(bullet => {
     if (!bullet.active) return;
