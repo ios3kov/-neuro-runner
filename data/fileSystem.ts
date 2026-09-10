@@ -2,7 +2,6 @@ import { FileNode, GameId } from '../types';
 
 export const LORE_PASSWORD = 'QWERTY123';
 
-// Compact Node Builders
 const d = (id: string, name: string, children: FileNode[], rest: Partial<FileNode> = {}): FileNode => 
   ({ id, name, type: 'FOLDER', children, ...rest });
 
@@ -11,6 +10,7 @@ const f = (id: string, name: string, desc: string, gameId?: GameId, rest: Partia
 
 export const fileSystemData: FileNode = d('root', 'ROOT', [
   d('arcade', 'ARCADE', [
+    f('crosswire', 'CROSSWIRE.EXE', 'Grid Crossing', 'CROSSWIRE'),
     f('vapor', 'VAPORWARE.EXE', 'Loading Sim', 'VAPORWARE'),
     f('run', 'AERO_RUN.EXE', 'Training Sim', 'RUNNER'),
     f('def', 'DEFENDER.EXE', 'Defense Sys', 'DEFENDER'),
@@ -80,7 +80,7 @@ export const getFileContent = (id: string) =>
 const ICONS: Record<string, string> = {
   personal: '🔞', trash: '🗑️', AI_CHAT: '👁️', SETTINGS: '⚙️', 
   copyright: '®', passwords: '🔒', FOLDER: '📁', EXE: '💾',
-  epstein: '✈️', RUNNER: '🏃', VAPORWARE: '⌛',
+  epstein: '✈️', RUNNER: '🏃', VAPORWARE: '⌛', CROSSWIRE: '⬆️',
   downloads: '📥', blueprint: '📐', music: '🎵',
   BREAKOUT: '🧱', SNAKE: '🐍', PONG: '🏓', ASTEROIDS: '☄️',
   DRIFT: '🏎️', DEFENDER: '🛡️'
