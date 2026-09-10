@@ -37,3 +37,4 @@ export type GameState =
   | 'PAUSED'
   | 'GAMEOVER'
   | 'LEVEL_COMPLETE';
+

@@ -36,12 +36,43 @@ interface Zone {
     type: 'OVERCLOCK';
 }
 
+interface SnakeState {
+    snake: Point[];
+    dir: Point;
+    nextDir: Point;
+    food: Point & { type: FoodType };
+    keyItem: Point | null;
+    walls: Point[];
+    gates: Gate[];
+    tunnels: Tunnel[];
+    zones: Zone[];
+    timer: number;
+    speed: number;
+    baseSpeed: number;
+    score: number;
+    level: number;
+    gameOver: boolean;
+    firewallTimer: number;
+    firewallPhaseTime: number;
+    firewallJustSwitched: boolean;
+    virusEffect: VirusEffect;
+    virusTimer: number;
+    hasKey: boolean;
+    inOverclock: boolean;
+    overclockScoreTimer: number;
+    history: Point[];
+    ghostFrame: number;
+    animTime: number;
+    justTeleported: boolean;
+    itemsCollected: number;
+}
+
 export const SnakeGame: React.FC = () => {
-    const { addLog } = useStore();
+    const addLog = useStore((s) => s.addLog);
     const updateStats = useGameStore(s => s.updateStats);
     const ghostMemory = useRef<Point[]>([]); 
 
-    const state = useRef({
+    const state = useRef<SnakeState>({
         snake: [{x: 10, y: 10}],
         dir: {x: 1, y: 0},
         nextDir: {x: 1, y: 0}, 
@@ -194,11 +225,11 @@ export const SnakeGame: React.FC = () => {
         if (startLevel >= 19) addLog(LogLevel.WARN, "OVERCLOCK_ZONES_DETECTED");
     };
 
-    const isPosOccupied = (x: number, y: number, s: any) => {
-        if (s.snake.some((p: any) => p.x === x && p.y === y)) return true;
-        if (s.walls.some((p: any) => p.x === x && p.y === y)) return true;
-        if (s.gates.some((p: any) => p.x === x && p.y === y)) return true;
-        if (s.tunnels.some((p: any) => p.x === x && p.y === y)) return true;
+    const isPosOccupied = (x: number, y: number, s: SnakeState) => {
+        if (s.snake.some((p) => p.x === x && p.y === y)) return true;
+        if (s.walls.some((p) => p.x === x && p.y === y)) return true;
+        if (s.gates.some((p) => p.x === x && p.y === y)) return true;
+        if (s.tunnels.some((p) => p.x === x && p.y === y)) return true;
         return false;
     };
 

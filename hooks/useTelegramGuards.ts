@@ -6,7 +6,7 @@ import { useEffect } from 'react';
  */
 export const useTelegramGuards = () => {
     useEffect(() => {
-        const tg = (window as any).Telegram?.WebApp;
+        const tg = window.Telegram?.WebApp;
         
         // 1. Telegram API Configuration
         if (tg) {
@@ -58,7 +58,8 @@ export const useTelegramGuards = () => {
                 target = target.parentElement as HTMLElement;
             }
 
-            if (!isScrollable && (e as any).scale !== 1) {
+            const scale = 'scale' in e ? (e as GestureEvent).scale : 1;
+            if (!isScrollable && scale !== 1) {
                 preventDefault(e);
             }
         };

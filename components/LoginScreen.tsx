@@ -18,12 +18,15 @@ const FAKE_FILES = [
 type FieldType = 'username' | 'password';
 
 export const LoginScreen: React.FC = () => {
-  const { login, addLog, user, setAppState } = useStore();
+  const login = useStore((s) => s.login);
+  const addLog = useStore((s) => s.addLog);
+  const savedUsername = useStore((s) => s.user.username);
+  const setAppState = useStore((s) => s.setAppState);
   
   // Initialize username from Telegram WebApp data if available, otherwise store or default
   const [username, setUsername] = useState(() => {
-      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
-      let initName = tgUser?.username || tgUser?.first_name || user.username || '';
+      const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+      let initName = tgUser?.username || tgUser?.first_name || savedUsername || '';
       // Sanitize initial name to match our alphabet (Now allows spaces)
       return initName.toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 16); 
   });

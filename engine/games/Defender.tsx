@@ -46,7 +46,7 @@ const CONFIG_TABLE: LevelConfig[] = Array.from({ length: 25 }, (_, i) => {
 });
 
 export const DefenderGame: React.FC = () => {
-    const { addLog } = useStore();
+    const addLog = useStore((s) => s.addLog);
     const updateStats = useGameStore(s => s.updateStats);
     
     const [score, setScore] = useState(0);

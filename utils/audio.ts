@@ -11,7 +11,8 @@ class AudioEngine {
 
   constructor() {
     try {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
       this.ctx = new Ctx();
       this.masterGain = this.ctx!.createGain();
       this.masterGain.connect(this.ctx!.destination);
@@ -67,7 +68,9 @@ class AudioEngine {
   stopAmbient = () => {
     this.ambientNodes.forEach(node => {
       try {
-        if ((node as any).stop) (node as any).stop();
+        if ('stop' in node && typeof (node as AudioScheduledSourceNode).stop === 'function') {
+          (node as AudioScheduledSourceNode).stop();
+        }
         node.disconnect();
       } catch(e) {}
     });

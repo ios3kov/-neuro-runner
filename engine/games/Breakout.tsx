@@ -5,11 +5,44 @@ import { useGameStore } from '../../gameStore';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
 
+
+interface Block {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    type: number;
+    hp: number;
+    active: boolean;
+    hex: string;
+}
+
+interface BreakoutState {
+    ball: { x: number; y: number; vx: number; vy: number };
+    paddle: { x: number; w: number };
+    blocks: Block[];
+    score: number;
+    level: number;
+    lives: number;
+    gameOver: boolean;
+    totalBlocks: number;
+    destroyedCount: number;
+}
+
+const isBreakoutState = (value: unknown): value is BreakoutState => {
+    if (!value || typeof value !== 'object') return false;
+    const state = value as Partial<BreakoutState>;
+    return !!state.ball && !!state.paddle && Array.isArray(state.blocks)
+        && typeof state.score === 'number' && typeof state.level === 'number'
+        && typeof state.lives === 'number' && typeof state.gameOver === 'boolean'
+        && typeof state.totalBlocks === 'number' && typeof state.destroyedCount === 'number';
+};
+
 export const BreakoutGame: React.FC = () => {
     const updateStats = useGameStore(s => s.updateStats);
     
-    const createBlocks = (level: number) => {
-        const blocks = [];
+    const createBlocks = (level: number): Block[] => {
+        const blocks: Block[] = [];
         const rows = Math.min(8, 4 + Math.floor(level / 2));
         for(let r=0; r<rows; r++) {
             for(let c=0; c<8; c++) {
@@ -30,7 +63,7 @@ export const BreakoutGame: React.FC = () => {
         return blocks;
     };
 
-    const state = useRef({
+    const state = useRef<BreakoutState>({
         ball: { x: 50, y: 80, vx: 50, vy: -50 },
         paddle: { x: 40, w: 20 },
         blocks: createBlocks(1),
@@ -89,20 +122,21 @@ export const BreakoutGame: React.FC = () => {
 
     const loadState = (data: string) => {
         try {
-            const loaded = JSON.parse(data);
+            const loaded: unknown = JSON.parse(data);
+            if (!isBreakoutState(loaded)) return;
             state.current = loaded;
             setScore(loaded.score);
             setLevel(loaded.level);
             setGameOver(loaded.gameOver);
             
             // Recalc progress
-            const active = loaded.blocks.filter((b: any) => b.active).length;
+            const active = loaded.blocks.filter((b) => b.active).length;
             const progress = 1 - (active / loaded.totalBlocks);
             setLevelProgress(progress);
         } catch(e) {}
     };
 
-    const destroyBlock = (index: number, juice: GameCoreHandle, s: any) => {
+    const destroyBlock = (index: number, juice: GameCoreHandle, s: BreakoutState) => {
         const block = s.blocks[index];
         if (!block.active) return;
 
@@ -119,14 +153,14 @@ export const BreakoutGame: React.FC = () => {
             juice.addShake(block.type === 3 ? 5 : 2);
             
             // Update Progress
-            const activeBlocks = s.blocks.filter((b: any) => b.active).length;
+            const activeBlocks = s.blocks.filter((b) => b.active).length;
             const progress = 1 - (activeBlocks / s.totalBlocks);
             setLevelProgress(progress);
 
             if (block.type === 3) {
                 juice.addChromatic(10);
                 juice.triggerHitStop(50);
-                s.blocks.forEach((other: any, i: number) => {
+                s.blocks.forEach((other, i) => {
                     if (other.active && i !== index) {
                         const dx = Math.abs(other.x - block.x);
                         const dy = Math.abs(other.y - block.y);
@@ -146,7 +180,7 @@ export const BreakoutGame: React.FC = () => {
         const s = state.current;
         if (s.gameOver) return;
 
-        if (s.blocks.every((b: any) => !b.active)) {
+        if (s.blocks.every((b) => !b.active)) {
             nextLevel(juice);
             return;
         }
@@ -200,7 +234,7 @@ export const BreakoutGame: React.FC = () => {
             }
         }
 
-        s.blocks.forEach((b: any, i: number) => {
+        s.blocks.forEach((b, i) => {
             if (!b.active) return;
             if (s.ball.x > b.x && s.ball.x < b.x + b.w && 
                 s.ball.y > b.y && s.ball.y < b.y + b.h) {
@@ -234,7 +268,7 @@ export const BreakoutGame: React.FC = () => {
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
         
-        s.blocks.forEach((b: any) => {
+        s.blocks.forEach((b) => {
             if (!b.active) return;
             const color = b.type === 3 ? '#f0f' : b.type === 2 ? '#ff0' : '#0f0';
             ctx.strokeStyle = color;

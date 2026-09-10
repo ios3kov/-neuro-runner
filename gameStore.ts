@@ -7,6 +7,7 @@ import { normalizeGameProgress, sanitizeGameProgress, STATE_PRIORITY } from './u
 import { audio } from './utils/audio';
 import { haptics } from './utils/haptics';
 import { emitSystemLog } from './utils/systemEvents';
+import { isRecord } from './state/coreUtils';
 
 
 interface GameStoreState extends PlayerData {
@@ -165,16 +166,16 @@ export const useGameStore = create<GameStoreState>()(
         {
             name: 'netrunner-game-storage', // SEPARATE STORAGE KEY
             version: 1,
-            migrate: (persistedState: any) => {
-                if (!persistedState) return persistedState;
-                const nextState = { ...persistedState };
-                
-                // Ensure data structure validity
-                nextState.gameProgress = normalizeGameProgress(nextState.gameProgress);
-                nextState.stats = nextState.stats || {};
-                nextState.achievements = Array.isArray(nextState.achievements) ? nextState.achievements : [];
-                
-                return nextState;
+            migrate: (persistedState: unknown) => {
+                const source = isRecord(persistedState) ? persistedState : {};
+                return {
+                    ...source,
+                    gameProgress: normalizeGameProgress(source.gameProgress),
+                    stats: isRecord(source.stats) ? source.stats : {},
+                    achievements: Array.isArray(source.achievements)
+                        ? source.achievements.filter((id): id is string => typeof id === 'string')
+                        : [],
+                };
             }
         }
     )

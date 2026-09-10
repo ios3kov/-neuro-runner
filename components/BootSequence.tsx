@@ -57,7 +57,8 @@ const BOOT_LOGS = [
 ];
 
 export const BootSequence: React.FC = () => {
-  const { setAppState, addLog } = useStore();
+  const setAppState = useStore((s) => s.setAppState);
+  const addLog = useStore((s) => s.addLog);
   const [logs, setLogs] = useState<{id: string, timestamp: string, level: LogLevel, message: string}[]>([]);
   
   // Terminal Logic State

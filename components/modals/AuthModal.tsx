@@ -17,7 +17,7 @@ interface AuthModalProps {
 export const AuthModal: React.FC<AuthModalProps> = ({
     isOpen, targetName, onClose, onSuccess
 }) => {
-    const { addLog } = useStore();
+    const addLog = useStore((s) => s.addLog);
     const [password, setPassword] = useState('');
     const [error, setError] = useState(false);
     const [showKeyboard, setShowKeyboard] = useState(false);

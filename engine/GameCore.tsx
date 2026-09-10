@@ -1,19 +1,16 @@
 
-import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { useStore } from '../store';
 import { useGameStore } from '../gameStore';
 import { GAME_CONFIGS } from '../data/gameConfig';
 import { audio } from '../utils/audio';
 import { LogLevel, JuiceState, LevelResult } from '../types';
 import { buildCompletedLevelResult } from './core/levelResults';
+import type { GameCoreHandle, GameState, InputState, Particle } from './core/gameTypes';
+import { useGameInput } from './hooks/useGameInput';
+import { useGameLoop } from './hooks/useGameLoop';
 
-export interface GameCoreHandle {
-  addShake: (amount: number) => void;
-  triggerHitStop: (ms: number) => void;
-  addChromatic: (amount: number) => void;
-  emitParticles: (x: number, y: number, color: string, count: number) => void;
-  levelUp: (level: number, metrics?: Record<string, number>) => void; 
-}
+export type { GameCoreHandle, InputState } from './core/gameTypes';
 
 interface GameProps {
   update: (dt: number, input: InputState, juice: GameCoreHandle) => void;
@@ -29,28 +26,6 @@ interface GameProps {
   onLoad?: (data: string) => void; 
 }
 
-export interface InputState {
-  keys: Set<string>;
-  swipeDirection: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null;
-  touchX: number;
-  touchY: number;
-  touchDeltaX: number;
-  touchDeltaY: number;
-  isTouching: boolean;
-  tapDetected: boolean;
-}
-
-interface Particle {
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    life: number;
-    color: string;
-    size: number;
-}
-
-type GameState = 'INIT_LOADING' | 'LEVEL_SELECT' | 'LOADING' | 'BRIEFING' | 'WAITING_TO_START' | 'PLAYING' | 'PAUSED' | 'GAMEOVER' | 'LEVEL_COMPLETE';
 
 export const GameCore = forwardRef<GameCoreHandle, GameProps>(({ 
     update, draw, onReset, isGameOver, score, level, progress = 0, gameId, instructions, onSave, onLoad 
@@ -62,6 +37,7 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
   const addLog = useStore(s => s.addLog);
   const toggleSound = useStore(s => s.toggleSound);
   const soundEnabled = useStore(s => s.user.settings.soundEnabled ?? true);
+  const lowPowerMode = useStore(s => s.user.settings.lowPowerMode ?? false);
   
   // Game Store for Progression
   const submitLevelResult = useGameStore(s => s.submitLevelResult);
@@ -70,51 +46,26 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
   const [gameState, setGameState] = useState<GameState>('INIT_LOADING');
   const [initLoadProgress, setInitLoadProgress] = useState(0);
   const [selectedLevelIndex, setSelectedLevelIndex] = useState(1);
-  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
   
   const [levelResult, setLevelResult] = useState<LevelResult | null>(null);
   const startTimeRef = useRef(0);
   
   const juiceRef = useRef<JuiceState>({ shake: 0, chromaticAberration: 0, hitStop: 0 });
   const particlesRef = useRef<Particle[]>([]);
-  const timeRef = useRef(0);
-  const lastTouchRef = useRef<{x: number, y: number} | null>(null);
-
-  const inputRef = useRef<InputState>({
-    keys: new Set(),
-    swipeDirection: null,
-    touchX: 0,
-    touchY: 0,
-    touchDeltaX: 0,
-    touchDeltaY: 0,
-    isTouching: false,
-    tapDetected: false
-  });
 
   const gameConfig = GAME_CONFIGS[gameId];
   const userGameProgress = gameProgress[gameId] || { levels: {}, unlockedLevels: [`${gameId}_1`] };
 
   useEffect(() => {
-    const preventDefault = (e: Event) => {
-        if (e.type === 'touchmove' || e.type === 'gesturestart' || e.type === 'touchstart') {
-            e.preventDefault();
-        }
-    };
-    document.addEventListener('touchmove', preventDefault, { passive: false });
-    document.addEventListener('gesturestart', preventDefault, { passive: false });
-    
     const handleVisibility = () => {
-        if (document.hidden) {
-            setGameState(prev => (prev === 'PLAYING' || prev === 'WAITING_TO_START') ? 'PAUSED' : prev);
-        }
+      if (document.hidden) {
+        setGameState((prev) =>
+          prev === 'PLAYING' || prev === 'WAITING_TO_START' ? 'PAUSED' : prev,
+        );
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-        document.removeEventListener('touchmove', preventDefault);
-        document.removeEventListener('gesturestart', preventDefault);
-        document.removeEventListener('visibilitychange', handleVisibility);
-    };
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
   const handleStartLevel = (lvlIndex: number) => {
@@ -137,7 +88,7 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
     }
   };
 
-  const juiceHandle: GameCoreHandle = {
+  const juiceHandle = useMemo<GameCoreHandle>(() => ({
     addShake: (amount) => { juiceRef.current.shake = Math.min(juiceRef.current.shake + amount, 30); },
     triggerHitStop: (ms) => { juiceRef.current.hitStop = ms; },
     addChromatic: (amount) => { juiceRef.current.chromaticAberration = Math.max(juiceRef.current.chromaticAberration, amount); },
@@ -174,9 +125,9 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
         setGameState('LEVEL_COMPLETE');
         audio.playSuccess();
     }
-  };
+  }), [gameConfig.levels, gameId, score, selectedLevelIndex, submitLevelResult]);
 
-  useImperativeHandle(ref, () => juiceHandle);
+  useImperativeHandle(ref, () => juiceHandle, [juiceHandle]);
 
   useEffect(() => {
     if (gameState === 'INIT_LOADING') {
@@ -202,196 +153,49 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
     }
   }, [gameState]);
 
-  useEffect(() => {
-    if (gameState !== 'WAITING_TO_START') return;
-
-    const engage = () => {
-        setGameState('PLAYING');
-        audio.playTone(880, 'square', 0.1, 0.2); 
-        startTimeRef.current = Date.now();
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') return;
-        engage();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [gameState]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        inputRef.current.keys.add(e.code);
-        if (e.code === 'Escape') setGameState(prev => prev === 'PLAYING' ? 'PAUSED' : prev === 'PAUSED' ? 'PLAYING' : prev);
-    };
-    const handleKeyUp = (e: KeyboardEvent) => inputRef.current.keys.delete(e.code);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
+  const engage = useCallback(() => {
+    setGameState('PLAYING');
+    audio.playTone(880, 'square', 0.1, 0.2);
+    startTimeRef.current = Date.now();
   }, []);
 
-  useEffect(() => {
-    let animationFrameId: number;
-    let lastTime = performance.now();
+  const handleEscape = useCallback(() => {
+    setGameState((prev) =>
+      prev === 'PLAYING' ? 'PAUSED' : prev === 'PAUSED' ? 'PLAYING' : prev,
+    );
+  }, []);
 
-    const loop = (time: number) => {
-      if (useStore.getState().isSuspended) {
-          lastTime = time; 
-          inputRef.current.keys.clear();
-          inputRef.current.swipeDirection = null;
-          inputRef.current.tapDetected = false;
-          inputRef.current.isTouching = false;
-          animationFrameId = requestAnimationFrame(loop);
-          return;
-      }
+  const {
+    inputRef,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    resetTransientInput,
+    clearAllInput,
+  } = useGameInput({
+    canvasRef,
+    onEscape: handleEscape,
+    onEngage: engage,
+    isWaitingToStart: gameState === 'WAITING_TO_START',
+  });
 
-      let dt = Math.min((time - lastTime) / 1000, 0.1);
-      lastTime = time;
-
-      if (juiceRef.current.shake > 0) {
-          juiceRef.current.shake *= 0.9;
-          if (juiceRef.current.shake < 0.5) juiceRef.current.shake = 0;
-      }
-      if (juiceRef.current.chromaticAberration > 0) {
-          juiceRef.current.chromaticAberration *= 0.92;
-          if (juiceRef.current.chromaticAberration < 0.5) juiceRef.current.chromaticAberration = 0;
-      }
-
-      if (gameState === 'PLAYING') {
-          timeRef.current += dt;
-          if (juiceRef.current.hitStop > 0) {
-            juiceRef.current.hitStop -= dt * 1000;
-            dt = 0; 
-          }
-
-          particlesRef.current.forEach(p => {
-              p.x += p.vx * dt;
-              p.y += p.vy * dt;
-              p.life -= dt * 1.2; 
-          });
-          particlesRef.current = particlesRef.current.filter(p => p.life > 0);
-          
-          update(dt, inputRef.current, juiceHandle);
-          
-          inputRef.current.touchDeltaX *= 0.5;
-          inputRef.current.touchDeltaY *= 0.5;
-      }
-
-      if (canvasRef.current) {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-            canvas.width = canvas.clientWidth;
-            canvas.height = canvas.clientHeight;
-        }
-
-        if (ctx) {
-            ctx.save();
-            ctx.fillStyle = '#030303';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            if (juiceRef.current.shake > 0) {
-                const dx = (Math.random() - 0.5) * juiceRef.current.shake;
-                const dy = (Math.random() - 0.5) * juiceRef.current.shake;
-                ctx.translate(dx, dy);
-            }
-
-            if (juiceRef.current.chromaticAberration > 2) {
-                 ctx.shadowColor = 'rgba(255,0,0,0.5)';
-                 ctx.shadowOffsetX = Math.random() * 4 - 2;
-                 ctx.shadowOffsetY = Math.random() * 4 - 2;
-            }
-
-            draw(ctx, canvas.width, canvas.height); 
-            
-            const w = (val: number) => (val / 100) * canvas.width;
-            const h = (val: number) => (val / 100) * canvas.height; 
-            particlesRef.current.forEach(p => {
-                ctx.fillStyle = p.color;
-                ctx.globalAlpha = p.life;
-                ctx.fillRect(w(p.x), h(p.y), p.size, p.size);
-            });
-            ctx.globalAlpha = 1.0;
-            ctx.shadowColor = 'transparent';
-            ctx.restore();
-        }
-      }
-      
-      if (inputRef.current.swipeDirection) inputRef.current.swipeDirection = null;
-      inputRef.current.tapDetected = false;
-      animationFrameId = requestAnimationFrame(loop);
-    };
-
-    animationFrameId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [update, draw, gameState]);
+  useGameLoop({
+    canvasRef,
+    inputRef,
+    juiceRef,
+    particlesRef,
+    gameState,
+    lowPowerMode,
+    update,
+    draw,
+    juiceHandle,
+    clearAllInput,
+    resetTransientInput,
+  });
 
   useEffect(() => {
     if (isGameOver) setGameState('GAMEOVER');
   }, [isGameOver]);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (gameState === 'WAITING_TO_START') {
-        setGameState('PLAYING');
-        audio.playTone(880, 'square', 0.1, 0.2);
-        startTimeRef.current = Date.now();
-        return;
-    }
-
-    const t = e.touches[0];
-    const { clientX, clientY } = t;
-    const { innerWidth, innerHeight } = window;
-    const EDGE_MARGIN = 25;
-    if (clientX < EDGE_MARGIN || clientX > innerWidth - EDGE_MARGIN || clientY > innerHeight - EDGE_MARGIN) return;
-
-    setTouchStart({ x: t.clientX, y: t.clientY });
-    lastTouchRef.current = { x: t.clientX, y: t.clientY };
-    inputRef.current.isTouching = true;
-    inputRef.current.touchX = t.clientX;
-    inputRef.current.touchY = t.clientY;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-      const t = e.touches[0];
-      if (lastTouchRef.current) {
-          inputRef.current.touchDeltaX = ((t.clientX - lastTouchRef.current.x) / window.innerWidth) * 200;
-          inputRef.current.touchDeltaY = ((t.clientY - lastTouchRef.current.y) / window.innerHeight) * 200;
-      }
-
-      if (touchStart) {
-          const dx = t.clientX - touchStart.x;
-          const dy = t.clientY - touchStart.y;
-          const threshold = 25; 
-          if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
-              if (Math.abs(dx) > Math.abs(dy)) {
-                  inputRef.current.swipeDirection = dx > 0 ? 'RIGHT' : 'LEFT';
-              } else {
-                  inputRef.current.swipeDirection = dy > 0 ? 'DOWN' : 'UP';
-              }
-              setTouchStart({ x: t.clientX, y: t.clientY });
-          }
-      }
-
-      lastTouchRef.current = { x: t.clientX, y: t.clientY };
-      inputRef.current.touchX = t.clientX;
-      inputRef.current.touchY = t.clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    inputRef.current.isTouching = false;
-    if (!touchStart) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStart.x;
-    const dy = t.clientY - touchStart.y;
-    if (Math.abs(dx) < 15 && Math.abs(dy) < 15) inputRef.current.tapDetected = true;
-    setTouchStart(null);
-  };
 
   const handleNextLevel = () => {
       handleStartLevel(selectedLevelIndex + 1);
@@ -439,13 +243,7 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onMouseDown={(e) => {
-             if (gameState === 'WAITING_TO_START') {
-                setGameState('PLAYING');
-                audio.playTone(880, 'square', 0.1, 0.2);
-                startTimeRef.current = Date.now();
-            }
-        }}
+        onMouseDown={() => { if (gameState === 'WAITING_TO_START') engage(); }}
       />
 
       {gameState === 'INIT_LOADING' && (
@@ -465,11 +263,7 @@ export const GameCore = forwardRef<GameCoreHandle, GameProps>(({
       {gameState === 'WAITING_TO_START' && (
           <div 
             className="absolute inset-0 z-[90] flex items-center justify-center bg-black/30 backdrop-blur-[2px] cursor-pointer"
-            onClick={() => {
-                setGameState('PLAYING');
-                audio.playTone(880, 'square', 0.1, 0.2);
-                startTimeRef.current = Date.now();
-            }}
+            onClick={engage}
           >
               <div className="bg-black/80 border border-cyan-500/40 px-8 py-6 cyber-shape flex flex-col items-center animate-pulse">
                   <div className="text-cyan-400 font-bold tracking-[0.2em] text-sm uppercase mb-2 neon-text">
