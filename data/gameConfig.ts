@@ -10,6 +10,7 @@ const breakoutRows = (level: number) => Math.min(9, 4 + Math.floor((level - 1) /
 const breakoutTarget = (level: number) => breakoutRows(level) * 8;
 const asteroidsTarget = (level: number) => 12 + Math.floor((level - 1) * 1.8);
 const driftTarget = (level: number) => 10 + Math.floor((level - 1) * 1.25);
+const runnerDistance = (level: number) => 520 + level * 32;
 
 const STRATEGIES: Record<string, (l: number) => GoalSpec> = {
   SNAKE: (l) => goal('collect_items', snakeTarget(l), `COLLECT ${snakeTarget(l)} DATA`),
@@ -18,7 +19,7 @@ const STRATEGIES: Record<string, (l: number) => GoalSpec> = {
   ASTEROIDS: (l) => goal('destroy_targets', asteroidsTarget(l), `NEUTRALIZE ${asteroidsTarget(l)} THREATS`),
   DRIFT: (l) => goal('destroy_targets', driftTarget(l), `CLEAR ${driftTarget(l)} GATES`),
   PONG: (l) => goal('finish_level', 1, `WIN FIRST-TO-${pongTarget(l)} DUEL`),
-  RUNNER: () => goal('finish_level', 1, 'COMPLETE TRAINING'),
+  RUNNER: (l) => goal('finish_level', 1, `COMPLETE ${runnerDistance(l)}m RUN`),
   VAPORWARE: () => goal('finish_level', 1, 'ESCAPE THE LOOP')
 };
 
@@ -43,7 +44,7 @@ export const GAME_CONFIGS: Record<string, GameConfig> = {
   ASTEROIDS: { gameId: 'ASTEROIDS', title: 'ASTEROIDS', levels: levels('ASTEROIDS', 20) },
   DRIFT: { gameId: 'DRIFT', title: 'DRIFT', levels: levels('DRIFT', 20) },
   DEFENDER: { gameId: 'DEFENDER', title: 'DEFENDER', levels: levels('DEFENDER', 25) },
-  RUNNER: { gameId: 'RUNNER', title: 'AERO_RUN', levels: levels('RUNNER', 1) },
+  RUNNER: { gameId: 'RUNNER', title: 'AERO_RUN', levels: levels('RUNNER', 20) },
   VAPORWARE: {
     gameId: 'VAPORWARE',
     title: 'VAPORWARE',
