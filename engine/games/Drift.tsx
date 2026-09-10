@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useGameStore } from '../../gameStore';
+import { useStore } from '../../store';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
 import { gateColor, gateKindFor, getDriftRules } from './drift/driftConfig';
 import type { DriftGate, DriftState } from './drift/driftTypes';
+import { drawDriftScene } from './drift/driftRenderer';
 
 let gateSerial = 1;
 
@@ -42,6 +44,7 @@ const isDriftState = (value: unknown): value is DriftState => {
 
 export const DriftGame: React.FC = () => {
   const updateStats = useGameStore(s => s.updateStats);
+  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);
   const state = useRef<DriftState>(createState(1));
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -183,82 +186,8 @@ export const DriftGame: React.FC = () => {
   }, [updateStats]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const s = state.current;
-    const w = (v: number) => width * v / 100;
-    const h = (v: number) => height * v / 100;
-
-    const bg = ctx.createLinearGradient(0, 0, 0, height);
-    bg.addColorStop(0, 'rgba(5,5,8,1)');
-    bg.addColorStop(0.55, 'rgba(0,15,24,1)');
-    bg.addColorStop(1, 'rgba(25,0,18,1)');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, width, height);
-
-    const horizon = h(20);
-    ctx.strokeStyle = 'rgba(0,243,255,0.13)';
-    ctx.lineWidth = 1;
-    for (let x = -100; x <= 200; x += 10) {
-      ctx.beginPath();
-      ctx.moveTo(width / 2 + (w(x) - width / 2) * 0.07, horizon);
-      ctx.lineTo(w(x), height);
-      ctx.stroke();
-    }
-    const offset = (s.distance * 0.045) % 1;
-    for (let i = 0; i < 18; i += 1) {
-      const t = (i + offset) / 18;
-      const y = horizon + (height - horizon) * t * t;
-      ctx.globalAlpha = 0.08 + t * 0.2;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = 'rgba(255,0,85,0.06)';
-    ctx.fillRect(0, horizon, w(8), height - horizon);
-    ctx.fillRect(w(92), horizon, w(8), height - horizon);
-
-    for (const gate of s.gates) {
-      const moving = gate.kind === 'MOVING' || gate.kind === 'CORE'
-        ? Math.sin(s.elapsed * (gate.kind === 'CORE' ? 2.8 : 1.8) + gate.phase) * (gate.kind === 'CORE' ? 14 : 9)
-        : 0;
-      const center = Math.max(10, Math.min(90, gate.center + moving));
-      const left = w(center - gate.width / 2);
-      const right = w(center + gate.width / 2);
-      const y = h(gate.y);
-      const color = gate.passed ? '#00ff88' : gateColor(gate.kind);
-      ctx.save();
-      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = gate.kind === 'CORE' ? 18 : 10;
-      ctx.globalAlpha = gate.passed ? 0.28 : 0.72 + Math.sin(s.elapsed * 8 + gate.phase) * 0.15;
-      ctx.fillRect(0, y, left, h(1.2));
-      ctx.fillRect(right, y, width - right, h(1.2));
-      ctx.globalAlpha *= 0.4;
-      ctx.fillRect(left - 2, y - h(2), 2, h(5));
-      ctx.fillRect(right, y - h(2), 2, h(5));
-      if (gate.kind === 'GLITCH' && !gate.passed) {
-        ctx.globalAlpha = 0.25;
-        ctx.fillRect(left + ((Math.sin(s.elapsed * 16 + gate.phase) + 1) * 0.5) * Math.max(1, right - left), y - h(1), w(0.5), h(3));
-      }
-      ctx.restore();
-    }
-
-    const px = w(s.playerX), py = h(85);
-    ctx.save();
-    ctx.translate(px, py);
-    const bank = Math.max(-0.42, Math.min(0.42, s.velocityX * 0.018));
-    ctx.rotate(bank);
-    const shipColor = s.overdrive > 0 ? '#f3ff00' : '#00f3ff';
-    ctx.shadowColor = shipColor; ctx.shadowBlur = 18; ctx.fillStyle = shipColor;
-    ctx.beginPath(); ctx.moveTo(0, -h(2.8)); ctx.lineTo(-w(2.2), h(2.5)); ctx.lineTo(0, h(1.4)); ctx.lineTo(w(2.2), h(2.5)); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.8; ctx.fillRect(-w(0.45), h(1.3), w(0.9), h(2.4));
-    ctx.globalAlpha = 0.35;
-    for (let i = 0; i < 4; i += 1) ctx.fillRect(-w(0.18), h(3.5 + i * 1.4), w(0.36), h(0.9));
-    ctx.restore();
-
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left'; ctx.fillStyle = '#dffcff'; ctx.fillText(`HULL ${s.lives}`, w(2), h(97));
-    ctx.fillStyle = s.overdrive > 0 ? '#f3ff00' : '#00f3ff'; ctx.fillText(`${Math.round(s.speed)} KM/S`, w(2), h(99.4));
-    ctx.textAlign = 'center'; ctx.fillStyle = s.combo >= 8 ? '#f3ff00' : '#00f3ff'; ctx.fillText(`CHAIN x${s.combo}`, width / 2, h(98.2));
-    ctx.textAlign = 'right'; ctx.fillStyle = '#dffcff'; ctx.fillText(`GATES ${Math.max(0, s.targetPassed - s.passed)}`, w(98), h(98.2));
-  }, []);
+    drawDriftScene(ctx, state.current, width, height, { lowPowerMode });
+  }, [lowPowerMode]);
 
   const instructions = useMemo(() => [
     'STEER THROUGH THE NEON DATA CORRIDOR. EVERY NODE IS A FIXED RUN.',
