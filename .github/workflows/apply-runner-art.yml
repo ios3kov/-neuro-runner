@@ -1,0 +1,37 @@
+name: Apply AERO_RUN hero renderer
+on:
+  push:
+    branches: [art/runner-hero-pass]
+    paths: [.github/workflows/apply-runner-art.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: art/runner-hero-pass
+      - name: Integrate renderer
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('engine/games/Runner.tsx')
+          s = p.read_text()
+          s = s.replace("import { useGameStore } from '../../gameStore';\n", "import { useGameStore } from '../../gameStore';\nimport { useStore } from '../../store';\n")
+          s = s.replace("import type { RunnerLane, RunnerObject, RunnerState } from './runner/runnerTypes';\n", "import type { RunnerLane, RunnerObject, RunnerState } from './runner/runnerTypes';\nimport { drawRunnerScene } from './runner/runnerRenderer';\n")
+          s = s.replace("  const updateStats = useGameStore(s => s.updateStats);\n", "  const updateStats = useGameStore(s => s.updateStats);\n  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);\n")
+          start = s.index('  const draw = useCallback(')
+          end = s.index('  const instructions = useMemo', start)
+          replacement = "  const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {\n    drawRunnerScene(ctx, state.current, width, height, { lowPowerMode });\n  }, [lowPowerMode]);\n\n"
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s)
+      - name: Remove one-time workflow
+        run: rm .github/workflows/apply-runner-art.yml
+      - name: Commit integrated renderer
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add engine/games/Runner.tsx engine/games/runner/runnerRenderer.ts .github/workflows/apply-runner-art.yml
+          git commit -m "Integrate AERO_RUN technical-art renderer"
+          git push origin HEAD:art/runner-hero-pass
