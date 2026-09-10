@@ -15,6 +15,7 @@ import { DriftGame } from '../engine/games/Drift';
 import { DefenderGame } from '../engine/games/Defender';
 import { RunnerGame } from '../engine/games/Runner';
 import { VaporwareGame } from '../engine/games/Vaporware';
+import { CrosswireGame } from '../engine/games/Crosswire';
 import { PlaceholderGame } from '../engine/games/Placeholder';
 
 const GAME_REGISTRY: Record<GameId, React.FC> = {
@@ -26,8 +27,9 @@ const GAME_REGISTRY: Record<GameId, React.FC> = {
     DEFENDER: DefenderGame,
     RUNNER: RunnerGame,
     VAPORWARE: VaporwareGame,
+    CROSSWIRE: CrosswireGame,
     AI_CHAT: AiChat,
-    SETTINGS: () => null, // Should not happen via registry, handled via AppState
+    SETTINGS: () => null,
 };
 
 export const AppContent: React.FC = () => {
