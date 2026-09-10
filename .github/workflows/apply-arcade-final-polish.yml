@@ -1,0 +1,43 @@
+name: Apply final Arcade polish
+on:
+  push:
+    branches: [art/arcade-final-polish]
+    paths: [.github/workflows/apply-arcade-final-polish.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: art/arcade-final-polish
+      - name: Apply final polish
+        shell: python
+        run: |
+          from pathlib import Path
+
+          loop = Path('engine/hooks/useGameLoop.ts')
+          s = loop.read_text()
+          old = 'const viewport = syncCanvasViewport(canvas, lowPowerMode ? 1 : 3);'
+          new = 'const viewport = syncCanvasViewport(canvas, lowPowerMode ? 1 : 2);'
+          if old not in s:
+            raise SystemExit('DPR target not found')
+          loop.write_text(s.replace(old, new))
+
+          fx = Path('engine/visuals/canvasFx.ts')
+          s = fx.read_text()
+          old = """  ctx.globalAlpha = 0.35 * intensity;\n  ctx.font = `bold ${Math.max(8, Math.floor(Math.min(width, height) * 0.015))}px monospace`;\n  ctx.textAlign = 'left';\n  ctx.fillStyle = art.accent;\n  ctx.fillText(`${art.label} // NODE ${String(Math.max(1, level)).padStart(2, '0')}`, pad + 4, height - pad - 5);\n"""
+          new = """  const labelFontSize = Math.max(8, Math.floor(Math.min(width, height) * 0.015));\n  const nodeLabel = `${art.label} // NODE ${String(Math.max(1, level)).padStart(2, '0')}`;\n  ctx.font = `bold ${labelFontSize}px monospace`;\n  ctx.textAlign = 'left';\n  const labelWidth = ctx.measureText(nodeLabel).width + 12;\n  const labelHeight = labelFontSize + 10;\n  ctx.globalAlpha = 0.42 * intensity;\n  ctx.fillStyle = 'rgba(0,0,0,0.58)';\n  ctx.fillRect(pad, pad, labelWidth, labelHeight);\n  ctx.globalAlpha = 0.72 * intensity;\n  ctx.strokeStyle = hexToRgba(art.primary, 0.46);\n  ctx.strokeRect(pad + 0.5, pad + 0.5, labelWidth - 1, labelHeight - 1);\n  ctx.fillStyle = art.accent;\n  ctx.fillText(nodeLabel, pad + 6, pad + labelFontSize + 4);\n"""
+          if old not in s:
+            raise SystemExit('Node label target not found')
+          fx.write_text(s.replace(old, new))
+      - name: Remove one-time workflow
+        run: rm .github/workflows/apply-arcade-final-polish.yml
+      - name: Commit final polish
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add engine/hooks/useGameLoop.ts engine/visuals/canvasFx.ts .github/workflows/apply-arcade-final-polish.yml
+          git commit -m "Polish Arcade readability and mobile canvas performance"
+          git push origin HEAD:art/arcade-final-polish
