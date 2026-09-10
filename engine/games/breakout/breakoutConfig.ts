@@ -6,14 +6,14 @@ export const getBreakoutRules = (level: number): BreakoutLevelRules => ({
   level,
   rows: Math.min(9, 4 + Math.floor((level - 1) / 2)),
   targetDestroyed: Math.min(72, (4 + Math.floor((level - 1) / 2)) * 8),
-  ballSpeed: Math.min(150, 62 + level * 4.2),
-  paddleWidth: clamp(21 - level * 0.45, 10, 21),
-  lives: level >= 16 ? 2 : 3,
-  movingRows: level >= 7,
-  shieldChance: level >= 10 ? Math.min(0.28, 0.06 + (level - 10) * 0.02) : 0,
-  explosiveChance: level >= 4 ? Math.min(0.22, 0.05 + (level - 4) * 0.012) : 0,
-  corruptChance: level >= 13 ? Math.min(0.2, 0.04 + (level - 13) * 0.018) : 0,
-  multiball: level >= 9,
+  ballSpeed: Math.min(138, 62 + level * 3.8),
+  paddleWidth: clamp(22 - level * 0.42, 12, 22),
+  lives: level >= 19 ? 2 : 3,
+  movingRows: level >= 8,
+  shieldChance: level >= 10 ? Math.min(0.24, 0.05 + (level - 10) * 0.018) : 0,
+  explosiveChance: level >= 4 ? Math.min(0.2, 0.05 + (level - 4) * 0.01) : 0,
+  corruptChance: level >= 13 ? Math.min(0.17, 0.035 + (level - 13) * 0.016) : 0,
+  multiball: level >= 10,
   coreMode: level >= 18,
 });
 
@@ -52,7 +52,7 @@ export const createBreakoutBlocks = (level: number): BreakoutBlock[] => {
         maxHp: hp,
         active: true,
         phase: (row * 0.7 + col * 0.45) % (Math.PI * 2),
-        vx: rules.movingRows && row % 2 === 1 ? (row % 4 === 1 ? 4 : -4) : 0,
+        vx: rules.movingRows && row % 2 === 1 ? (row % 4 === 1 ? 3.5 : -3.5) : 0,
       });
     }
   }

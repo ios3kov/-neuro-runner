@@ -3,13 +3,13 @@ import type { AsteroidKind, AsteroidsLevelRules, Vec2 } from './asteroidsTypes';
 export const getAsteroidsRules = (level: number): AsteroidsLevelRules => ({
   level,
   targetKills: 12 + Math.floor((level - 1) * 1.8),
-  spawnEvery: Math.max(0.38, 1.55 - level * 0.045),
-  speedScale: 1 + level * 0.075,
-  lives: level >= 16 ? 2 : 3,
-  fastChance: level >= 4 ? Math.min(0.28, 0.07 + (level - 4) * 0.015) : 0,
-  armoredChance: level >= 7 ? Math.min(0.28, 0.06 + (level - 7) * 0.018) : 0,
-  mineChance: level >= 11 ? Math.min(0.22, 0.05 + (level - 11) * 0.018) : 0,
-  coreChance: level >= 17 ? Math.min(0.2, 0.06 + (level - 17) * 0.035) : 0,
+  spawnEvery: Math.max(0.48, 1.58 - level * 0.043),
+  speedScale: 1 + level * 0.06,
+  lives: level >= 19 ? 2 : 3,
+  fastChance: level >= 4 ? Math.min(0.24, 0.06 + (level - 4) * 0.013) : 0,
+  armoredChance: level >= 7 ? Math.min(0.24, 0.05 + (level - 7) * 0.015) : 0,
+  mineChance: level >= 11 ? Math.min(0.18, 0.04 + (level - 11) * 0.015) : 0,
+  coreChance: level >= 17 ? Math.min(0.18, 0.05 + (level - 17) * 0.03) : 0,
 });
 
 export const asteroidColor = (kind: AsteroidKind) => ({

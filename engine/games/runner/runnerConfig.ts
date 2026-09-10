@@ -3,13 +3,13 @@ import type { RunnerLane, RunnerLevelRules, RunnerObject, RunnerObjectType } fro
 export const getRunnerRules = (level: number): RunnerLevelRules => ({
   level,
   distance: 520 + level * 32,
-  baseSpeed: 9.2 + level * 0.22,
-  maxSpeed: 14.5 + level * 0.42,
-  acceleration: 0.45 + level * 0.018,
-  spacing: Math.max(22, 38 - level * 0.65),
-  boostChance: level >= 5 ? Math.min(0.18, 0.05 + (level - 5) * 0.01) : 0,
-  glitchChance: level >= 9 ? Math.min(0.16, 0.04 + (level - 9) * 0.012) : 0,
-  obstacleDensity: Math.min(0.82, 0.45 + level * 0.018),
+  baseSpeed: 9 + level * 0.18,
+  maxSpeed: 14 + level * 0.34,
+  acceleration: 0.42 + level * 0.016,
+  spacing: Math.max(24, 39 - level * 0.62),
+  boostChance: level >= 5 ? Math.min(0.17, 0.05 + (level - 5) * 0.009) : 0,
+  glitchChance: level >= 9 ? Math.min(0.14, 0.035 + (level - 9) * 0.01) : 0,
+  obstacleDensity: Math.min(0.74, 0.42 + level * 0.016),
 });
 
 const laneFor = (seed: number): RunnerLane => ([-1, 0, 1] as const)[Math.abs(seed) % 3];
@@ -39,7 +39,7 @@ export const buildRunnerTrack = (level: number): RunnerObject[] => {
       objects.push({ id: id++, z: z + 13, lane: safeLane as RunnerLane, type: 'COIN', collected: false, yOffset: type === 'BEAM' ? 1.6 : 0 });
     }
 
-    if (level >= 13 && index % 7 === 0) {
+    if (level >= 13 && index % 8 === 0) {
       const blocked = lane === -1 ? 1 : -1;
       objects.push({ id: id++, z: z + 1.2, lane: blocked as RunnerLane, type: 'WALL', collected: false, yOffset: 0 });
     }

@@ -6,12 +6,12 @@ export const VAPOR_ACTIONS: VaporAction[] = ['TAP', 'LEFT', 'RIGHT', 'UP', 'DOWN
 export const getVaporwareRules = (level: number): VaporwareRules => ({
   level,
   targetCorrect: 8 + Math.floor((level - 1) * 1.4),
-  lives: level >= 8 ? 2 : 3,
-  screenDurationMin: Math.max(1.15, 2.4 - level * 0.08),
-  screenDurationMax: Math.max(1.8, 3.7 - level * 0.1),
-  promptWindow: Math.max(0.58, 1.25 - level * 0.045),
-  promptEveryMin: Math.max(0.65, 1.5 - level * 0.06),
-  promptEveryMax: Math.max(1.2, 2.5 - level * 0.075),
+  lives: level >= 10 ? 2 : 3,
+  screenDurationMin: Math.max(1.25, 2.45 - level * 0.075),
+  screenDurationMax: Math.max(1.95, 3.75 - level * 0.095),
+  promptWindow: Math.max(0.68, 1.28 - level * 0.04),
+  promptEveryMin: Math.max(0.75, 1.55 - level * 0.055),
+  promptEveryMax: Math.max(1.3, 2.55 - level * 0.07),
 });
 
 export const vaporActionLabel = (action: VaporAction) => ({
