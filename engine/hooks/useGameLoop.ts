@@ -4,6 +4,7 @@ import { useStore } from '../../store';
 import { syncCanvasViewport } from '../core/canvasViewport';
 import type { GameCoreHandle, GameState, InputState, Particle } from '../core/gameTypes';
 import type { JuiceState } from '../../types';
+import { drawGlobalGameFx } from '../visuals/canvasFx';
 
 interface UseGameLoopOptions {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -35,6 +36,7 @@ export const useGameLoop = ({
   useEffect(() => {
     let animationFrameId = 0;
     let lastTime = performance.now();
+    let visualTime = 0;
 
     const loop = (time: number) => {
       if (useStore.getState().isSuspended) {
@@ -46,6 +48,7 @@ export const useGameLoop = ({
 
       let dt = Math.min((time - lastTime) / 1000, 0.1);
       lastTime = time;
+      visualTime += dt;
 
       if (juiceRef.current.shake > 0) {
         juiceRef.current.shake *= 0.9;
@@ -106,6 +109,14 @@ export const useGameLoop = ({
           }
           ctx.globalAlpha = 1;
           ctx.shadowColor = 'transparent';
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+
+          drawGlobalGameFx(ctx, width, height, {
+            time: visualTime,
+            lowPowerMode,
+            intensity: gameState === 'PLAYING' ? 1 : 0.72,
+          });
           ctx.restore();
         }
       }
