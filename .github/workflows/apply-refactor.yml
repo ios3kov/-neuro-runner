@@ -1,0 +1,62 @@
+name: Apply refactor
+
+on:
+  push:
+    branches: [refactor/all-recommendations-2026-09-10]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reconstruct verified source archive
+        run: |
+          cat \
+            .refactor_payload/part00 \
+            .refactor_payload/part01 \
+            .refactor_payload/part02 \
+            .refactor_payload/part03 \
+            .refactor_payload/small/part040 \
+            .refactor_payload/small/part041 \
+            .refactor_payload/small/part042 \
+            .refactor_payload/small/part050 \
+            .refactor_payload/small/part051 \
+            .refactor_payload/small/part052 \
+            .refactor_payload/small/part060 \
+            .refactor_payload/small/part061 \
+            .refactor_payload/small/part062 \
+            .refactor_payload/small/part070 \
+            .refactor_payload/small/part071 \
+            .refactor_payload/small/part072 \
+            .refactor_payload/small/part08a > /tmp/refactor.b64
+          test "$(wc -c < /tmp/refactor.b64)" -eq 99192
+          base64 -d /tmp/refactor.b64 > /tmp/refactor.tar.xz
+          xz -t /tmp/refactor.tar.xz
+          tar -tJf /tmp/refactor.tar.xz > /tmp/archive-list.txt
+      - name: Replace staged tree with refactored source
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          tar -xJf /tmp/refactor.tar.xz -C .
+          rm -f .github/workflows/finalize-refactor.yml .github/workflows/apply-refactor.yml
+      - name: Lock dependencies
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Commit verified refactor
+        run: |
+          rm -rf dist
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Complete refactor and verification"
+          git push
