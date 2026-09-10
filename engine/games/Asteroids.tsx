@@ -1,9 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useGameStore } from '../../gameStore';
+import { useStore } from '../../store';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
 import { asteroidColor, asteroidHp, chooseAsteroidKind, getAsteroidsRules, makePolygon } from './asteroids/asteroidsConfig';
+import { drawAsteroidsScene } from './asteroids/asteroidsRenderer';
 import type { AsteroidEntity, AsteroidsState } from './asteroids/asteroidsTypes';
 
 let serial = 1;
@@ -42,6 +44,7 @@ const isAsteroidsState = (value: unknown): value is AsteroidsState => {
 
 export const AsteroidsGame: React.FC = () => {
   const updateStats = useGameStore(s => s.updateStats);
+  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);
   const state = useRef<AsteroidsState>(createState(1));
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -283,77 +286,8 @@ export const AsteroidsGame: React.FC = () => {
   }, [updateStats]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const s = state.current;
-    const w = (v: number) => width * v / 100;
-    const h = (v: number) => height * v / 100;
-
-    const bg = ctx.createRadialGradient(width * 0.5, height * 0.45, 0, width * 0.5, height * 0.45, Math.max(width, height) * 0.75);
-    bg.addColorStop(0, 'rgba(0,243,255,0.055)');
-    bg.addColorStop(0.55, 'rgba(5,5,8,0.015)');
-    bg.addColorStop(1, 'rgba(255,0,85,0.045)');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
-
-    ctx.fillStyle = 'rgba(0,243,255,0.18)';
-    for (let i = 0; i < 38; i += 1) {
-      const x = ((i * 37 + s.level * 11) % 100) / 100 * width;
-      const y = ((i * 61 + Math.floor(s.elapsed * 3)) % 100) / 100 * height;
-      ctx.fillRect(x, y, i % 7 === 0 ? 2 : 1, i % 7 === 0 ? 2 : 1);
-    }
-
-    s.asteroids.forEach(asteroid => {
-      const color = asteroidColor(asteroid.kind);
-      ctx.save();
-      ctx.translate(w(asteroid.x), h(asteroid.y));
-      ctx.rotate(asteroid.rotation);
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = asteroid.kind === 'CORE' ? 18 : 8;
-      ctx.lineWidth = asteroid.kind === 'CORE' ? 2.4 : 1.4;
-      ctx.beginPath();
-      asteroid.vertices.forEach((point, index) => {
-        const px = w(point.x), py = w(point.y);
-        if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      });
-      ctx.closePath();
-      ctx.globalAlpha = 0.16; ctx.fill();
-      ctx.globalAlpha = 0.9; ctx.stroke();
-      if (asteroid.maxHp > 1) {
-        ctx.globalAlpha = 0.55;
-        ctx.fillRect(-w(asteroid.size), w(asteroid.size + 1.2), w(asteroid.size * 2 * asteroid.hp / asteroid.maxHp), 1.5);
-      }
-      if (asteroid.kind === 'MINE') {
-        ctx.globalAlpha = 0.4 + Math.sin(s.elapsed * 10) * 0.2;
-        ctx.beginPath(); ctx.arc(0, 0, w(asteroid.size * 1.45), 0, Math.PI * 2); ctx.stroke();
-      }
-      ctx.restore();
-    });
-
-    s.bullets.forEach(bullet => {
-      ctx.save(); ctx.fillStyle = '#fff'; ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 10;
-      ctx.beginPath(); ctx.arc(w(bullet.x), h(bullet.y), w(0.32), 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    });
-
-    const p = s.player;
-    ctx.save();
-    ctx.translate(w(p.x), h(p.y));
-    ctx.rotate(p.rotation);
-    const blink = p.invulnerable > 0 && Math.floor(s.elapsed * 14) % 2 === 0;
-    ctx.globalAlpha = blink ? 0.25 : 1;
-    ctx.strokeStyle = '#00f3ff'; ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 16; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(w(2.2), 0); ctx.lineTo(w(-1.4), w(1.4)); ctx.lineTo(w(-0.65), 0); ctx.lineTo(w(-1.4), w(-1.4)); ctx.closePath(); ctx.stroke();
-    if (p.shield > 0) {
-      ctx.globalAlpha = 0.18 + p.shield / 100 * 0.25;
-      ctx.beginPath(); ctx.arc(0, 0, w(3.1), 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.restore();
-
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left'; ctx.fillStyle = '#dffcff'; ctx.fillText(`HULL ${s.lives}`, w(2), h(97));
-    ctx.fillStyle = '#00f3ff'; ctx.fillText(`SHIELD ${Math.round(p.shield)}%`, w(2), h(99.5));
-    ctx.textAlign = 'center'; ctx.fillStyle = s.combo >= 8 ? '#f3ff00' : '#00f3ff'; ctx.fillText(`CHAIN x${s.combo}`, width / 2, h(98.2));
-    ctx.textAlign = 'right'; ctx.fillStyle = '#dffcff'; ctx.fillText(`THREATS ${Math.max(0, s.targetKills - s.kills)}`, w(98), h(98.2));
-  }, []);
+    drawAsteroidsScene(ctx, state.current, width, height, { lowPowerMode });
+  }, [lowPowerMode]);
 
   const instructions = useMemo(() => [
     'ROTATE WITH LEFT/RIGHT OR HORIZONTAL TOUCH. THRUST WITH UP/DRAG.',
