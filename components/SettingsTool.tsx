@@ -7,43 +7,49 @@ import { Z_LAYERS } from '../constants/ui';
 import { UI_STRINGS } from '../constants/strings';
 
 export const SettingsTool: React.FC = () => {
-  const { user, toggleSound, toggleMusic, toggleHidden, toggleHaptics, toggleLowPower, setAppState } = useStore();
+  const userSettings = useStore((s) => s.user.settings);
+  const toggleSound = useStore((s) => s.toggleSound);
+  const toggleMusic = useStore((s) => s.toggleMusic);
+  const toggleHidden = useStore((s) => s.toggleHidden);
+  const toggleHaptics = useStore((s) => s.toggleHaptics);
+  const toggleLowPower = useStore((s) => s.toggleLowPower);
+  const setAppState = useStore((s) => s.setAppState);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const scrollGuard = useOverscrollGuard();
   
-  const settings = [
+  const settingItems = [
     { 
       id: 'sound', 
       label: 'AUDIO_FX', 
-      active: user.settings.soundEnabled, 
+      active: userSettings.soundEnabled, 
       action: toggleSound,
       icon: '🔊' 
     },
     { 
       id: 'music', 
       label: 'AMBIENCE', 
-      active: user.settings.musicEnabled, 
+      active: userSettings.musicEnabled, 
       action: toggleMusic,
       icon: '🎵' 
     },
     { 
       id: 'hidden', 
       label: 'HIDDEN_FILES', 
-      active: user.settings.showHidden, 
+      active: userSettings.showHidden, 
       action: toggleHidden,
       icon: '👁️' 
     },
     { 
       id: 'haptics', 
       label: 'HAPTICS', 
-      active: user.settings.hapticsEnabled ?? true, 
+      active: userSettings.hapticsEnabled ?? true, 
       action: toggleHaptics,
       icon: '📳' 
     },
     {
       id: 'power',
       label: 'LOW_POWER',
-      active: user.settings.lowPowerMode ?? false,
+      active: userSettings.lowPowerMode ?? false,
       action: toggleLowPower,
       icon: '🔋'
     }
@@ -51,19 +57,19 @@ export const SettingsTool: React.FC = () => {
 
   const handleToggle = (index: number) => {
     audio.playClick();
-    settings[index].action();
+    settingItems[index].action();
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
           e.preventDefault();
-          setFocusedIndex(prev => (prev + 1) % settings.length);
+          setFocusedIndex(prev => (prev + 1) % settingItems.length);
           audio.playHover();
       }
       if (e.key === 'ArrowUp') {
           e.preventDefault();
-          setFocusedIndex(prev => (prev - 1 + settings.length) % settings.length);
+          setFocusedIndex(prev => (prev - 1 + settingItems.length) % settingItems.length);
           audio.playHover();
       }
       if (e.key === 'Enter' || e.key === ' ') {
@@ -73,7 +79,7 @@ export const SettingsTool: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusedIndex, settings]);
+  }, [focusedIndex, settingItems]);
 
   return (
     <div 
@@ -104,7 +110,7 @@ export const SettingsTool: React.FC = () => {
 
         {/* Settings Grid */}
         <div className="flex flex-col gap-2 shrink-0">
-          {settings.map((item, index) => (
+          {settingItems.map((item, index) => (
             <div 
                 key={item.id}
                 onClick={() => { setFocusedIndex(index); handleToggle(index); }}

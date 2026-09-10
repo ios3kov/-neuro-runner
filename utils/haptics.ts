@@ -19,7 +19,7 @@ class HapticEngine {
   constructor() {
     // Detect mobile environment
     if (typeof window !== 'undefined') {
-      const tg = (window as any).Telegram?.WebApp;
+      const tg = window.Telegram?.WebApp;
       const ua = navigator.userAgent || '';
       const platform = tg?.platform || '';
       
@@ -58,7 +58,7 @@ class HapticEngine {
   private triggerImpact(style: HapticStyle) {
     if (!this.enabled) return;
 
-    const tg = (window as any).Telegram?.WebApp?.HapticFeedback;
+    const tg = window.Telegram?.WebApp?.HapticFeedback;
     if (tg) {
       tg.impactOccurred(style);
     } else if (this.isMobile && navigator.vibrate) {
@@ -79,7 +79,7 @@ class HapticEngine {
   private triggerNotification(type: NotificationType) {
     if (!this.enabled) return;
 
-    const tg = (window as any).Telegram?.WebApp?.HapticFeedback;
+    const tg = window.Telegram?.WebApp?.HapticFeedback;
     if (tg) {
       tg.notificationOccurred(type);
     } else if (this.isMobile && navigator.vibrate) {
@@ -98,7 +98,7 @@ class HapticEngine {
   selection() {
     if (!this.canTrigger('selection', this.LIMITS.selection)) return;
     
-    const tg = (window as any).Telegram?.WebApp?.HapticFeedback;
+    const tg = window.Telegram?.WebApp?.HapticFeedback;
     if (tg) tg.selectionChanged();
     else if (this.isMobile && navigator.vibrate) navigator.vibrate(2);
   }

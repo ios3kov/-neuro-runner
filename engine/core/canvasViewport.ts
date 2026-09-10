@@ -25,6 +25,7 @@ export const syncCanvasViewport = (
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
+  // Render in CSS-pixel coordinates while keeping a high-resolution backing store.
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { ctx, width, height, dpr };
 };

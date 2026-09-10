@@ -16,7 +16,7 @@ const DEFAULT_OPTS: Required<TelegramOptions> = {
 };
 
 export const useTelegram = (options: TelegramOptions = DEFAULT_OPTS) => {
-    const { appState } = useStore();
+    const appState = useStore((s) => s.appState);
     const [isLandscape, setIsLandscape] = useState(false);
     
     // Ref to track if options actually changed (deep check optimization if needed, 
@@ -28,7 +28,7 @@ export const useTelegram = (options: TelegramOptions = DEFAULT_OPTS) => {
         if (!opts.orientation) return;
 
         const handleOrientation = () => {
-            const tg = (window as any).Telegram?.WebApp;
+            const tg = window.Telegram?.WebApp;
             const platform = tg?.platform || 'unknown';
             
             // Filter for strict mobile platforms (Android/iOS)
@@ -71,7 +71,7 @@ export const useTelegram = (options: TelegramOptions = DEFAULT_OPTS) => {
     useEffect(() => {
         if (!opts.closingConfirmation) return;
 
-        const tg = (window as any).Telegram?.WebApp;
+        const tg = window.Telegram?.WebApp;
         if (!tg) return;
 
         // Enable native closing confirmation when logged in
@@ -86,7 +86,7 @@ export const useTelegram = (options: TelegramOptions = DEFAULT_OPTS) => {
     useEffect(() => {
         if (!opts.backButton) return;
 
-        const tg = (window as any).Telegram?.WebApp;
+        const tg = window.Telegram?.WebApp;
         
         const handleBackBtn = () => {
             // Unified Back Dispatcher

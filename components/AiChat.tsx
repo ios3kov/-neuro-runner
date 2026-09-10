@@ -31,8 +31,12 @@ const RECOVERY_LOGS = [
 ];
 
 export const AiChat: React.FC = () => {
-    const { user, stopGame, incrementOmniAttempts, resetOmniSession } = useStore();
-    const attempt = user.omniAttempts || 0;
+    const omniAttempts = useStore((s) => s.user.omniAttempts);
+    const omniIteration = useStore((s) => s.user.omniIteration);
+    const stopGame = useStore((s) => s.stopGame);
+    const incrementOmniAttempts = useStore((s) => s.incrementOmniAttempts);
+    const resetOmniSession = useStore((s) => s.resetOmniSession);
+    const attempt = omniAttempts || 0;
     const filename = "OMNI_CORE.AI";
 
     const [mode, setMode] = useState<ChatMode>('CHAT');
@@ -210,7 +214,7 @@ export const AiChat: React.FC = () => {
                     <div className="text-4xl mb-6 animate-bounce">🌀</div>
                     <h2 className="text-cyan-400 font-bold text-lg tracking-[0.2em] uppercase neon-text mb-2">RESTORE_COMPLETE</h2>
                     <p className="text-[9px] text-cyan-800 tracking-widest uppercase mb-8 leading-relaxed">
-                        Software integrity verified.<br/>Initial session protocols reset.<br/>Iteration: 0x0{user.omniIteration + 1}
+                        Software integrity verified.<br/>Initial session protocols reset.<br/>Iteration: 0x0{omniIteration + 1}
                     </p>
                     
                     <button 

@@ -5,8 +5,9 @@ import { AppState, GameId, LogEntry, LogLevel, UserSession, ViewMode, SuspendRea
 import { audio } from './utils/audio';
 import { haptics } from './utils/haptics';
 import { CORE_STORE_CONSTANTS, DEFAULT_SETTINGS, type ModalType } from './state/coreConfig';
-import { formatLogTimestamp, generateRuntimeId, isValidId, normalizeExpanded, normalizePath, reconcileExpanded, safeCounter } from './state/coreUtils';
+import { formatLogTimestamp, generateRuntimeId, isValidId, normalizeExpanded, normalizePath, reconcileExpanded, safeCounter, isRecord } from './state/coreUtils';
 import { subscribeSystemLog } from './utils/systemEvents';
+import { createDisplaySessionToken } from './utils/session';
 
 // --- 1. TYPES ---
 
@@ -188,7 +189,7 @@ export const useStore = create<StoreState>()(
 
         login: (username) => {
             const s = get();
-            const token = Math.random().toString(16).substr(2, 8).toUpperCase();
+            const token = createDisplaySessionToken();
             
             const nextUser = { 
                 ...s.user,
@@ -485,43 +486,44 @@ export const useStore = create<StoreState>()(
           expandedNodes: state.expandedNodes,
       }),
 
-      migrate: (persisted: any, version: number): PersistedState => {
-          // Default Fallback
-          const defaults = {
-              user: { 
-                  username: 'User', 
+      migrate: (persisted: unknown, _version: number): PersistedState => {
+          const defaults: PersistedState = {
+              user: {
+                  username: 'User',
                   settings: { ...DEFAULT_SETTINGS },
-                  omniAttempts: 0, omniDeleted: false, omniIteration: 0
+                  omniAttempts: 0,
+                  omniDeleted: false,
+                  omniIteration: 0,
               },
-              viewMode: 'GRID' as ViewMode,
-              expandedNodes: [CORE_STORE_CONSTANTS.ROOT_ID]
+              viewMode: 'GRID',
+              expandedNodes: [CORE_STORE_CONSTANTS.ROOT_ID],
           };
 
-          if (!persisted || typeof persisted !== 'object') return defaults;
+          if (!isRecord(persisted)) return defaults;
+          const persistedUser = isRecord(persisted.user) ? persisted.user : {};
+          const persistedSettings = isRecord(persistedUser.settings) ? persistedUser.settings : {};
+          const persistedViewMode = persisted.viewMode;
 
-          const p = persisted;
-          const u = p.user || {};
-          const s = u.settings || {};
-
-          // Safe Defaults Policy: 
-          // undefined/null for features -> true (enabled)
-          // undefined/null for lowPower -> false (disabled)
           return {
               user: {
-                  username: (typeof u.username === 'string' ? u.username.trim().slice(0, 32) : '') || defaults.user.username,
+                  username: (typeof persistedUser.username === 'string'
+                      ? persistedUser.username.trim().slice(0, 32)
+                      : '') || defaults.user.username,
                   settings: {
-                      soundEnabled: typeof s.soundEnabled === 'boolean' ? s.soundEnabled : true,
-                      musicEnabled: typeof s.musicEnabled === 'boolean' ? s.musicEnabled : true,
-                      showHidden: typeof s.showHidden === 'boolean' ? s.showHidden : true,
-                      hapticsEnabled: typeof s.hapticsEnabled === 'boolean' ? s.hapticsEnabled : true,
-                      lowPowerMode: typeof s.lowPowerMode === 'boolean' ? s.lowPowerMode : false,
+                      soundEnabled: typeof persistedSettings.soundEnabled === 'boolean' ? persistedSettings.soundEnabled : true,
+                      musicEnabled: typeof persistedSettings.musicEnabled === 'boolean' ? persistedSettings.musicEnabled : true,
+                      showHidden: typeof persistedSettings.showHidden === 'boolean' ? persistedSettings.showHidden : true,
+                      hapticsEnabled: typeof persistedSettings.hapticsEnabled === 'boolean' ? persistedSettings.hapticsEnabled : true,
+                      lowPowerMode: typeof persistedSettings.lowPowerMode === 'boolean' ? persistedSettings.lowPowerMode : false,
                   },
-                  omniAttempts: safeCounter(u.omniAttempts),
-                  omniDeleted: !!u.omniDeleted,
-                  omniIteration: safeCounter(u.omniIteration),
+                  omniAttempts: safeCounter(persistedUser.omniAttempts),
+                  omniDeleted: persistedUser.omniDeleted === true,
+                  omniIteration: safeCounter(persistedUser.omniIteration),
               },
-              viewMode: VALID_VIEW_MODES.includes(p.viewMode) ? p.viewMode : defaults.viewMode,
-              expandedNodes: normalizeExpanded(p.expandedNodes)
+              viewMode: typeof persistedViewMode === 'string' && VALID_VIEW_MODES.includes(persistedViewMode as ViewMode)
+                  ? persistedViewMode as ViewMode
+                  : defaults.viewMode,
+              expandedNodes: normalizeExpanded(persisted.expandedNodes),
           };
       },
 
@@ -535,7 +537,8 @@ export const useStore = create<StoreState>()(
 // --- 7. SELECTIVE SUBSCRIPTION (HMR Safe) ---
 
 const SUB_KEY = '__NETRUNNER_STORE_SUB_V3__';
-const g = globalThis as any;
+type RuntimeSubscriptionRegistry = typeof globalThis & Record<string, (() => void) | undefined>;
+const g = globalThis as RuntimeSubscriptionRegistry;
 
 if (g[SUB_KEY]) {
     g[SUB_KEY]();

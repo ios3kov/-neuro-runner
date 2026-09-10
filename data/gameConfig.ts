@@ -1,7 +1,7 @@
 import { GameConfig, GoalSpec, LevelSpec } from '../types';
 
 // Helper to reduce object literal noise and bundle size
-const goal = (type: any, target: number, label: string): GoalSpec => ({
+const goal = (type: GoalSpec['type'], target: number, label: string): GoalSpec => ({
   id: 'g1', type, required: true, target, label
 });
 
