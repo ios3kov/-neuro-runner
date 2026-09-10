@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches: [main, refactor/all-recommendations-2026-09-10]
+  pull_request:
     branches: [main]
 
 permissions:
@@ -15,6 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
