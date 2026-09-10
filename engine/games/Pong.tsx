@@ -1,132 +1,24 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { GameCore, InputState, GameCoreHandle } from '../GameCore';
+import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useStore } from '../../store';
 import { useGameStore } from '../../gameStore';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
 import { LogLevel } from '../../types';
-
-type ArenaMode = 'CLASSIC' | 'FIREWALL' | 'PULSE' | 'WARP' | 'NARROW' | 'CORE';
-
-interface Trail {
-  x: number;
-  y: number;
-  alpha: number;
-}
-
-interface Paddle {
-  x: number;
-  w: number;
-  score: number;
-}
-
-interface Ball {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  size: number;
-}
-
-interface Barrier {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  phase: number;
-}
-
-interface PongState {
-  ball: Ball;
-  p1: Paddle;
-  p2: Paddle;
-  score: number;
-  level: number;
-  targetScore: number;
-  gameOver: boolean;
-  roundComplete: boolean;
-  trails: Trail[];
-  rally: number;
-  maxRally: number;
-  combo: number;
-  bestCombo: number;
-  elapsed: number;
-  pulseTimer: number;
-  pulseActive: boolean;
-  warpCooldown: number;
-  barriers: Barrier[];
-  mode: ArenaMode;
-}
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-const targetForLevel = (level: number) => 3 + Math.floor((level - 1) / 5);
-
-const modeForLevel = (level: number): ArenaMode => {
-  if (level <= 3) return 'CLASSIC';
-  if (level <= 6) return 'FIREWALL';
-  if (level <= 9) return 'PULSE';
-  if (level <= 12) return 'WARP';
-  if (level <= 15) return 'FIREWALL';
-  if (level <= 18) return 'NARROW';
-  return 'CORE';
-};
-
-const paddleWidthForLevel = (level: number) => {
-  if (level >= 19) return 10;
-  if (level >= 16) return 11;
-  if (level >= 10) return 13;
-  return 15;
-};
-
-const buildBarriers = (level: number): Barrier[] => {
-  if ((level >= 4 && level <= 6) || (level >= 13 && level <= 15) || level >= 19) {
-    const second = level >= 14;
-    return [
-      { x: 8, y: 47, w: second ? 31 : 36, h: 2, phase: 0 },
-      { x: second ? 61 : 56, y: 51, w: second ? 31 : 36, h: 2, phase: Math.PI },
-    ];
-  }
-  return [];
-};
-
-const createInitialState = (level: number): PongState => {
-  const lvl = Math.max(1, Math.min(20, level || 1));
-  const paddleWidth = paddleWidthForLevel(lvl);
-  const baseSpeed = 78 + lvl * 4.8;
-  return {
-    ball: {
-      x: 50,
-      y: 50,
-      vx: (Math.random() > 0.5 ? 1 : -1) * (28 + Math.random() * 34),
-      vy: (Math.random() > 0.5 ? 1 : -1) * baseSpeed,
-      size: lvl >= 16 ? 1.35 : 1.6,
-    },
-    p1: { x: 50 - paddleWidth / 2, w: paddleWidth, score: 0 },
-    p2: { x: 50 - paddleWidth / 2, w: paddleWidth, score: 0 },
-    score: (lvl - 1) * 300,
-    level: lvl,
-    targetScore: targetForLevel(lvl),
-    gameOver: false,
-    roundComplete: false,
-    trails: [],
-    rally: 0,
-    maxRally: 0,
-    combo: 0,
-    bestCombo: 0,
-    elapsed: 0,
-    pulseTimer: 0,
-    pulseActive: false,
-    warpCooldown: 0,
-    barriers: buildBarriers(lvl),
-    mode: modeForLevel(lvl),
-  };
-};
+import type { ArenaMode, Paddle, PongState } from './pong/pongTypes';
+import {
+  buildPongBarriers,
+  clampPong,
+  createPongState,
+  PONG_MODE_MESSAGES,
+  pongModeForLevel,
+  pongTargetForLevel,
+} from './pong/pongConfig';
 
 export const PongGame: React.FC = () => {
   const addLog = useStore((s) => s.addLog);
   const updateStats = useGameStore((s) => s.updateStats);
-  const state = useRef<PongState>(createInitialState(1));
+  const state = useRef<PongState>(createPongState(1));
 
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -149,22 +41,13 @@ export const PongGame: React.FC = () => {
   }, []);
 
   const reset = useCallback((startLevel: number = 1) => {
-    const next = createInitialState(startLevel);
+    const next = createPongState(startLevel);
     state.current = next;
     setScore(next.score);
     setLevel(next.level);
     setGameOver(false);
     setLevelProgress(0);
-
-    const messages: Record<ArenaMode, string> = {
-      CLASSIC: 'ARENA_PROTOCOL: CLASSIC_DUEL',
-      FIREWALL: 'ARENA_PROTOCOL: MOVING_FIREWALLS',
-      PULSE: 'ARENA_PROTOCOL: PULSE_ACCELERATION',
-      WARP: 'ARENA_PROTOCOL: EDGE_WARP',
-      NARROW: 'ARENA_PROTOCOL: NARROW_DEFENSE',
-      CORE: 'ARENA_PROTOCOL: CORE_OVERLOAD',
-    };
-    addLog(next.level >= 16 ? LogLevel.WARN : LogLevel.SYS, messages[next.mode]);
+    addLog(next.level >= 16 ? LogLevel.WARN : LogLevel.SYS, PONG_MODE_MESSAGES[next.mode]);
   }, [addLog]);
 
   const saveState = useCallback(() => JSON.stringify(state.current), []);
@@ -173,19 +56,19 @@ export const PongGame: React.FC = () => {
     try {
       const loaded = JSON.parse(data) as Partial<PongState>;
       if (!loaded.ball || !loaded.p1 || !loaded.p2 || typeof loaded.level !== 'number') return;
-      const safeLevel = clamp(Math.floor(loaded.level), 1, 20);
+      const safeLevel = clampPong(Math.floor(loaded.level), 1, 20);
       state.current = {
-        ...createInitialState(safeLevel),
+        ...createPongState(safeLevel),
         ...loaded,
         level: safeLevel,
-        targetScore: targetForLevel(safeLevel),
-        mode: modeForLevel(safeLevel),
-        barriers: Array.isArray(loaded.barriers) ? loaded.barriers : buildBarriers(safeLevel),
+        targetScore: pongTargetForLevel(safeLevel),
+        mode: pongModeForLevel(safeLevel),
+        barriers: Array.isArray(loaded.barriers) ? loaded.barriers : buildPongBarriers(safeLevel),
       } as PongState;
       setScore(state.current.score || 0);
       setLevel(safeLevel);
       setGameOver(Boolean(state.current.gameOver));
-      setLevelProgress(clamp(state.current.p1.score / state.current.targetScore, 0, 1));
+      setLevelProgress(clampPong(state.current.p1.score / state.current.targetScore, 0, 1));
     } catch {
       addLog(LogLevel.ERR, 'PONG_SAVE_CORRUPTED');
     }
@@ -196,7 +79,7 @@ export const PongGame: React.FC = () => {
     const hitOffset = (s.ball.x - (s.p1.x + s.p1.w / 2)) / (s.p1.w / 2);
     s.ball.vy = -Math.abs(s.ball.vy) * Math.min(1.035, 1.01 + s.level * 0.001);
     s.ball.vx += hitOffset * (38 + s.level * 1.2);
-    s.ball.vx = clamp(s.ball.vx, -145, 145);
+    s.ball.vx = clampPong(s.ball.vx, -145, 145);
     s.ball.y = 93.7;
     s.rally += 1;
     s.maxRally = Math.max(s.maxRally, s.rally);
@@ -214,7 +97,7 @@ export const PongGame: React.FC = () => {
     const hitOffset = (s.ball.x - (s.p2.x + s.p2.w / 2)) / (s.p2.w / 2);
     s.ball.vy = Math.abs(s.ball.vy) * Math.min(1.03, 1.008 + s.level * 0.001);
     s.ball.vx += hitOffset * (30 + s.level);
-    s.ball.vx = clamp(s.ball.vx, -145, 145);
+    s.ball.vx = clampPong(s.ball.vx, -145, 145);
     s.ball.y = 6.3;
     s.rally += 1;
     s.maxRally = Math.max(s.maxRally, s.rally);
@@ -233,14 +116,14 @@ export const PongGame: React.FC = () => {
     if (input.keys.has('ArrowLeft') || input.keys.has('KeyA')) s.p1.x -= keyboardSpeed * dt;
     if (input.keys.has('ArrowRight') || input.keys.has('KeyD')) s.p1.x += keyboardSpeed * dt;
     if (input.isTouching) s.p1.x += input.touchDeltaX * 0.9;
-    s.p1.x = clamp(s.p1.x, 0, 100 - s.p1.w);
+    s.p1.x = clampPong(s.p1.x, 0, 100 - s.p1.w);
 
     const aiBase = 2.4 + s.level * 0.18;
     const prediction = s.ball.x + s.ball.vx * (0.035 + Math.min(0.06, s.level * 0.002));
     const targetX = prediction - s.p2.w / 2;
     const aiError = Math.max(0, 7 - s.level * 0.28) * Math.sin(s.elapsed * 1.9);
     s.p2.x += (targetX + aiError - s.p2.x) * aiBase * dt;
-    s.p2.x = clamp(s.p2.x, 0, 100 - s.p2.w);
+    s.p2.x = clampPong(s.p2.x, 0, 100 - s.p2.w);
 
     if (s.mode === 'PULSE' || s.mode === 'CORE') {
       s.pulseTimer += dt;
@@ -318,7 +201,7 @@ export const PongGame: React.FC = () => {
       s.combo = Math.min(12, s.combo + 2);
       s.bestCombo = Math.max(s.bestCombo, s.combo);
       setScore(s.score);
-      setLevelProgress(clamp(s.p1.score / s.targetScore, 0, 1));
+      setLevelProgress(clampPong(s.p1.score / s.targetScore, 0, 1));
 
       audio.playSuccess();
       haptics.notificationSuccess();
@@ -347,7 +230,7 @@ export const PongGame: React.FC = () => {
     if (s.ball.y > 102) {
       s.p2.score += 1;
       s.combo = 0;
-      setLevelProgress(clamp(s.p1.score / s.targetScore, 0, 1));
+      setLevelProgress(clampPong(s.p1.score / s.targetScore, 0, 1));
       audio.playError();
       haptics.notificationWarning();
       juice.addShake(14);
