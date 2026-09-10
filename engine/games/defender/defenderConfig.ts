@@ -2,17 +2,17 @@ import type { DefenderEnemyKind, DefenderRules } from './defenderTypes';
 
 export const getDefenderRules = (level: number): DefenderRules => ({
   level,
-  duration: 20 + level * 5,
-  spawnEvery: Math.max(0.3, 1.45 - level * 0.043),
-  baseSpeed: 17 + level * 1.05,
-  maxEnemies: 6 + Math.floor(level * 0.58),
-  shieldArc: Math.max(0.52, 1.08 - level * 0.022),
-  shieldTurnSpeed: 3.5 + level * 0.07,
-  damage: level >= 18 ? 25 : 20,
-  fastChance: level >= 5 ? Math.min(0.28, 0.08 + (level - 5) * 0.012) : 0,
-  corruptChance: level >= 9 ? Math.min(0.24, 0.05 + (level - 9) * 0.014) : 0,
-  heavyChance: level >= 13 ? Math.min(0.22, 0.05 + (level - 13) * 0.016) : 0,
-  splitterChance: level >= 17 ? Math.min(0.18, 0.04 + (level - 17) * 0.018) : 0,
+  duration: 20 + level * 4,
+  spawnEvery: Math.max(0.42, 1.5 - level * 0.04),
+  baseSpeed: 16 + level * 0.85,
+  maxEnemies: 6 + Math.floor(level * 0.45),
+  shieldArc: Math.max(0.58, 1.12 - level * 0.02),
+  shieldTurnSpeed: 3.4 + level * 0.065,
+  damage: level >= 22 ? 25 : 20,
+  fastChance: level >= 5 ? Math.min(0.24, 0.07 + (level - 5) * 0.011) : 0,
+  corruptChance: level >= 9 ? Math.min(0.2, 0.045 + (level - 9) * 0.012) : 0,
+  heavyChance: level >= 13 ? Math.min(0.19, 0.045 + (level - 13) * 0.014) : 0,
+  splitterChance: level >= 17 ? Math.min(0.16, 0.035 + (level - 17) * 0.016) : 0,
   bossMode: level >= 23,
 });
 
