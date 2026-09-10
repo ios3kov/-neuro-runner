@@ -28,8 +28,6 @@ export interface LogEntry {
   message: string;
 }
 
-// --- DOMAIN: GAME DATA ---
-
 export interface GameStats {
   id: string;
   plays: number;
@@ -40,11 +38,11 @@ export interface GameStats {
 
 export type LevelState = 'LOCKED' | 'UNLOCKED' | 'COMPLETED' | 'PERFECT';
 
-export type GoalType = 
-  | 'score_at_least' 
-  | 'survive_seconds' 
-  | 'collect_items' 
-  | 'destroy_targets' 
+export type GoalType =
+  | 'score_at_least'
+  | 'survive_seconds'
+  | 'collect_items'
+  | 'destroy_targets'
   | 'finish_level';
 
 export interface GoalSpec {
@@ -62,7 +60,7 @@ export interface LevelSpec {
   description: string;
   difficulty: 'EASY' | 'NORMAL' | 'HARD' | 'EXPERT';
   goals: GoalSpec[];
-  unlocksOnComplete?: string[]; // IDs of levels to unlock
+  unlocksOnComplete?: string[];
 }
 
 export interface GameConfig {
@@ -78,7 +76,7 @@ export interface LevelResult {
   status: 'COMPLETED' | 'PERFECT' | 'FAILED' | 'UNLOCKED';
   score: number;
   durationMs: number;
-  goalsCompleted: Record<string, boolean>; // goalId -> completed
+  goalsCompleted: Record<string, boolean>;
   timestamp: number;
 }
 
@@ -91,28 +89,32 @@ export interface LevelProgress {
 
 export interface GameProgress {
   levels: Record<string, LevelProgress>;
-  unlockedLevels: string[]; // List of levelIds
+  unlockedLevels: string[];
 }
 
-export type GameId = 'SNAKE' | 'PONG' | 'BREAKOUT' | 'ASTEROIDS' | 'DRIFT' | 'DEFENDER' | 'SETTINGS' | 'AI_CHAT' | 'RUNNER' | 'VAPORWARE' | 'CROSSWIRE' | 'BATTLE' | 'LUNAR_LEM' | 'FLIP_FLOP';
-
-// --- SYSTEM: USER SESSION ---
+export type GameId =
+  | 'SNAKE' | 'PONG' | 'BREAKOUT' | 'ASTEROIDS' | 'DRIFT' | 'DEFENDER'
+  | 'SETTINGS' | 'AI_CHAT' | 'RUNNER' | 'VAPORWARE' | 'CROSSWIRE' | 'BATTLE' | 'LUNAR_LEM' | 'FLIP_FLOP'
+  | 'ZELI_ASTEROIDS' | 'ZELI_BOMBERMAN' | 'ZELI_BREAKOUT' | 'ZELI_DIGDUG'
+  | 'ZELI_DONKEY_KONG' | 'ZELI_FLAPPY_JELLY' | 'ZELI_FROGGER' | 'ZELI_GALAGA'
+  | 'ZELI_JUMP_MAN' | 'ZELI_JUMP_RUNNER' | 'ZELI_MINI_PACMAN' | 'ZELI_MINI_TETRIS'
+  | 'ZELI_PING_PONG' | 'ZELI_SNAKE' | 'ZELI_SPACE_INVADER';
 
 export interface UserSettings {
   soundEnabled: boolean;
   musicEnabled: boolean;
   showHidden: boolean;
-  hapticsEnabled: boolean; // Tri-state in logic (undefined = true), strict boolean here
+  hapticsEnabled: boolean;
   lowPowerMode: boolean;
 }
 
 export interface UserSession {
   username: string;
-  sessionToken: string; // Transient
-  sessionStartTime: number | null; // Transient
-  omniAttempts: number; 
-  omniDeleted: boolean; 
-  omniIteration: number; 
+  sessionToken: string;
+  sessionStartTime: number | null;
+  omniAttempts: number;
+  omniDeleted: boolean;
+  omniIteration: number;
   settings: UserSettings;
 }
 

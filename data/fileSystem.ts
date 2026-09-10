@@ -2,30 +2,33 @@ import { FileNode, GameId } from '../types';
 
 export const LORE_PASSWORD = 'QWERTY123';
 
-const d = (id: string, name: string, children: FileNode[], rest: Partial<FileNode> = {}): FileNode => 
+const d = (id: string, name: string, children: FileNode[], rest: Partial<FileNode> = {}): FileNode =>
   ({ id, name, type: 'FOLDER', children, ...rest });
 
-const f = (id: string, name: string, desc: string, gameId?: GameId, rest: Partial<FileNode> = {}): FileNode => 
+const f = (id: string, name: string, desc: string, gameId?: GameId, rest: Partial<FileNode> = {}): FileNode =>
   ({ id, name, type: 'EXE', description: desc, gameId, ...rest });
 
 export const fileSystemData: FileNode = d('root', 'ROOT', [
   d('arcade', 'ARCADE', [
-    f('lunar_lem', 'LUNAR_LEM.EXE', 'Original Lunar LEM Rocket', 'LUNAR_LEM'),
-    f('flip_flop', 'FLIP_FLOP.EXE', 'Original Flip Flop', 'FLIP_FLOP'),
-    f('battle', 'BATTLE.EXE', 'Original Naval Battle', 'BATTLE'),
-    f('crosswire', 'CROSSWIRE.EXE', 'Grid Crossing', 'CROSSWIRE'),
-    f('vapor', 'VAPORWARE.EXE', 'Loading Sim', 'VAPORWARE'),
-    f('run', 'AERO_RUN.EXE', 'Training Sim', 'RUNNER'),
-    f('def', 'DEFENDER.EXE', 'Defense Sys', 'DEFENDER'),
-    f('drift', 'DRIFT.EXE', 'Flow Sim', 'DRIFT'),
-    f('ast', 'VOID.EXE', 'Space Combat', 'ASTEROIDS'),
-    f('break', 'BREAKER.EXE', 'Decryption', 'BREAKOUT'),
-    f('snake', 'SNAKE.EXE', 'Pattern Logic', 'SNAKE'),
-    f('pong', 'PONG.EXE', 'Reflex Test', 'PONG')
+    f('z_ast', 'ASTEROIDS.EXE', 'Zeli Arcade', 'ZELI_ASTEROIDS'),
+    f('z_bomb', 'BOMBERMAN.EXE', 'Zeli Arcade', 'ZELI_BOMBERMAN'),
+    f('z_break', 'BREAKOUT.EXE', 'Zeli Arcade', 'ZELI_BREAKOUT'),
+    f('z_dig', 'DIG_DUG.EXE', 'Zeli Arcade', 'ZELI_DIGDUG'),
+    f('z_dk', 'DONKEY_KONG.EXE', 'Zeli Arcade', 'ZELI_DONKEY_KONG'),
+    f('z_flappy', 'FLAPPY_JELLY.EXE', 'Zeli Arcade', 'ZELI_FLAPPY_JELLY'),
+    f('z_frog', 'FROGGER.EXE', 'Zeli Arcade', 'ZELI_FROGGER'),
+    f('z_galaga', 'GALAGA.EXE', 'Zeli Arcade', 'ZELI_GALAGA'),
+    f('z_jumpman', 'JUMP_MAN.EXE', 'Zeli Arcade', 'ZELI_JUMP_MAN'),
+    f('z_jumprun', 'JUMP_RUNNER.EXE', 'Zeli Arcade', 'ZELI_JUMP_RUNNER'),
+    f('z_pac', 'MINI_PACMAN.EXE', 'Zeli Arcade', 'ZELI_MINI_PACMAN'),
+    f('z_tetris', 'MINI_TETRIS.EXE', 'Zeli Arcade', 'ZELI_MINI_TETRIS'),
+    f('z_pong', 'PING_PONG.EXE', 'Zeli Arcade', 'ZELI_PING_PONG'),
+    f('z_snake', 'SNAKE.EXE', 'Zeli Arcade', 'ZELI_SNAKE'),
+    f('z_invader', 'SPACE_INVADER.EXE', 'Zeli Arcade', 'ZELI_SPACE_INVADER')
   ]),
   d('downloads', 'DOWNLOADS', [
-    f('arch', 'ARCHIVE_MGR.EXE', 'Unpack Data', 'BREAKOUT'),
-    f('update', 'PATCH_v4.3.BIN', 'System Update', 'VAPORWARE'),
+    f('arch', 'ARCHIVE_MGR.EXE', 'Unpack Data'),
+    f('update', 'PATCH_v4.3.BIN', 'System Update'),
     f('blueprint', 'FACILITY_MAP.PDF', 'Schematic'),
     f('music', 'SYNTH_MIX_VOL1.MP3', 'Audio')
   ]),
@@ -77,16 +80,17 @@ const TEXT_CONTENT: Record<string, string> = {
   blueprint: `SECTOR 7 SCHEMATICS\n\n[ACCESS RESTRICTED]\n\nLEVEL 1: HANGAR BAY\nLEVEL 2: R&D LABORATORIES\nLEVEL 3: NEURAL SERVER (PRIMARY TARGET)\n\nNOTES:\n- Thermal sensors in North Corridor active.\n- Ventilation shaft in Sector 4 unsecured.\n- Keycard required for Level 3 access.`
 };
 
-export const getFileContent = (id: string) => 
+export const getFileContent = (id: string) =>
   TEXT_CONTENT[id] || (id.startsWith('del_') ? "ERR: DELETED // RECOVERY_FAILED" : "ERR: BINARY_DATA_CORRUPTED // VIEW_MODE_UNSUPPORTED");
 
 const ICONS: Record<string, string> = {
-  personal: '🔞', trash: '🗑️', AI_CHAT: '👁️', SETTINGS: '⚙️', 
-  copyright: '®', passwords: '🔒', FOLDER: '📁', EXE: '💾',
-  epstein: '✈️', RUNNER: '🏃', VAPORWARE: '⌛', CROSSWIRE: '⬆️',
+  personal: '🔞', trash: '🗑️', AI_CHAT: '👁️', SETTINGS: '⚙️',
+  copyright: '®', passwords: '🔒', FOLDER: '📁', EXE: '💾', epstein: '✈️',
   downloads: '📥', blueprint: '📐', music: '🎵',
-  BREAKOUT: '🧱', SNAKE: '🐍', PONG: '🏓', ASTEROIDS: '☄️',
-  DRIFT: '🏎️', DEFENDER: '🛡️', BATTLE: '⚓', LUNAR_LEM: '🚀', FLIP_FLOP: '🔀'
+  ZELI_ASTEROIDS: '☄️', ZELI_BOMBERMAN: '💣', ZELI_BREAKOUT: '🧱', ZELI_DIGDUG: '⛏️',
+  ZELI_DONKEY_KONG: '🛢️', ZELI_FLAPPY_JELLY: '🪼', ZELI_FROGGER: '🐸', ZELI_GALAGA: '👾',
+  ZELI_JUMP_MAN: '⬆️', ZELI_JUMP_RUNNER: '🏃', ZELI_MINI_PACMAN: '🟡', ZELI_MINI_TETRIS: '🧩',
+  ZELI_PING_PONG: '🏓', ZELI_SNAKE: '🐍', ZELI_SPACE_INVADER: '🛸'
 };
 
 export const getIcon = (node: FileNode & { isParentLink?: boolean }) => {
@@ -96,9 +100,9 @@ export const getIcon = (node: FileNode & { isParentLink?: boolean }) => {
 
 export const getDecorStats = (id: string) => {
     const val = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    return { 
-      size: (val % 800) + 12, 
-      perm: val % 2 === 0 ? 'rw-r--r--' : 'rwxr-xr-x', 
-      addr: `0x${(val * 1234).toString(16).substring(0, 4).toUpperCase()}` 
+    return {
+      size: (val % 800) + 12,
+      perm: val % 2 === 0 ? 'rw-r--r--' : 'rwxr-xr-x',
+      addr: `0x${(val * 1234).toString(16).substring(0, 4).toUpperCase()}`
     };
 };

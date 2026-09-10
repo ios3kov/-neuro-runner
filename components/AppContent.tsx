@@ -7,33 +7,41 @@ import { FileSystem } from './FileSystem';
 import { Terminal } from './Terminal';
 import { SettingsTool } from './SettingsTool';
 import { AiChat } from './AiChat';
-import { SnakeGame } from '../engine/games/Snake';
-import { PongGame } from '../engine/games/Pong';
-import { BreakoutGame } from '../engine/games/Breakout';
-import { AsteroidsGame } from '../engine/games/Asteroids';
-import { DriftGame } from '../engine/games/Drift';
-import { DefenderGame } from '../engine/games/Defender';
-import { RunnerGame } from '../engine/games/Runner';
-import { VaporwareGame } from '../engine/games/Vaporware';
-import { CrosswireGame } from '../engine/games/Crosswire';
-import { BattleGame } from '../engine/games/Battle';
-import { LunarLemRocketGame } from '../engine/games/LunarLemRocket';
-import { FlipFlopGame } from '../engine/games/FlipFlop';
+import {
+    ZeliAsteroidsGame,
+    ZeliBombermanGame,
+    ZeliBreakoutGame,
+    ZeliDigDugGame,
+    ZeliDonkeyKongGame,
+    ZeliFlappyJellyGame,
+    ZeliFroggerGame,
+    ZeliGalagaGame,
+    ZeliJumpManGame,
+    ZeliJumpRunnerGame,
+    ZeliMiniPacmanGame,
+    ZeliMiniTetrisGame,
+    ZeliPingPongGame,
+    ZeliSnakeGame,
+    ZeliSpaceInvaderGame,
+} from '../engine/games/ZeliArcade';
 import { PlaceholderGame } from '../engine/games/Placeholder';
 
-const GAME_REGISTRY: Record<GameId, React.FC> = {
-    SNAKE: SnakeGame,
-    PONG: PongGame,
-    BREAKOUT: BreakoutGame,
-    ASTEROIDS: AsteroidsGame,
-    DRIFT: DriftGame,
-    DEFENDER: DefenderGame,
-    RUNNER: RunnerGame,
-    VAPORWARE: VaporwareGame,
-    CROSSWIRE: CrosswireGame,
-    BATTLE: BattleGame,
-    LUNAR_LEM: LunarLemRocketGame,
-    FLIP_FLOP: FlipFlopGame,
+const GAME_REGISTRY: Partial<Record<GameId, React.FC>> = {
+    ZELI_ASTEROIDS: ZeliAsteroidsGame,
+    ZELI_BOMBERMAN: ZeliBombermanGame,
+    ZELI_BREAKOUT: ZeliBreakoutGame,
+    ZELI_DIGDUG: ZeliDigDugGame,
+    ZELI_DONKEY_KONG: ZeliDonkeyKongGame,
+    ZELI_FLAPPY_JELLY: ZeliFlappyJellyGame,
+    ZELI_FROGGER: ZeliFroggerGame,
+    ZELI_GALAGA: ZeliGalagaGame,
+    ZELI_JUMP_MAN: ZeliJumpManGame,
+    ZELI_JUMP_RUNNER: ZeliJumpRunnerGame,
+    ZELI_MINI_PACMAN: ZeliMiniPacmanGame,
+    ZELI_MINI_TETRIS: ZeliMiniTetrisGame,
+    ZELI_PING_PONG: ZeliPingPongGame,
+    ZELI_SNAKE: ZeliSnakeGame,
+    ZELI_SPACE_INVADER: ZeliSpaceInvaderGame,
     AI_CHAT: AiChat,
     SETTINGS: () => null,
 };
@@ -45,10 +53,8 @@ export const AppContent: React.FC = () => {
     switch (appState) {
         case AppState.BOOT:
             return <BootSequence />;
-            
         case AppState.LOGIN:
             return <LoginScreen />;
-            
         case AppState.SETTINGS:
         case AppState.DESKTOP:
             return (
@@ -58,16 +64,11 @@ export const AppContent: React.FC = () => {
                     {appState === AppState.SETTINGS && <SettingsTool />}
                 </div>
             );
-            
         case AppState.GAME: {
             if (!currentGame) return null;
-            
-            const GameComponent = GAME_REGISTRY[currentGame] || 
-                (() => <PlaceholderGame name={currentGame} />);
-            
+            const GameComponent = GAME_REGISTRY[currentGame] || (() => <PlaceholderGame name={currentGame} />);
             return <GameComponent />;
         }
-        
         default:
             return null;
     }
