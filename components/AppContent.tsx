@@ -17,6 +17,8 @@ import { RunnerGame } from '../engine/games/Runner';
 import { VaporwareGame } from '../engine/games/Vaporware';
 import { CrosswireGame } from '../engine/games/Crosswire';
 import { BattleGame } from '../engine/games/Battle';
+import { LunarLemRocketGame } from '../engine/games/LunarLemRocket';
+import { FlipFlopGame } from '../engine/games/FlipFlop';
 import { PlaceholderGame } from '../engine/games/Placeholder';
 
 const GAME_REGISTRY: Record<GameId, React.FC> = {
@@ -30,6 +32,8 @@ const GAME_REGISTRY: Record<GameId, React.FC> = {
     VAPORWARE: VaporwareGame,
     CROSSWIRE: CrosswireGame,
     BATTLE: BattleGame,
+    LUNAR_LEM: LunarLemRocketGame,
+    FLIP_FLOP: FlipFlopGame,
     AI_CHAT: AiChat,
     SETTINGS: () => null,
 };

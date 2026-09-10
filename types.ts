@@ -94,7 +94,7 @@ export interface GameProgress {
   unlockedLevels: string[]; // List of levelIds
 }
 
-export type GameId = 'SNAKE' | 'PONG' | 'BREAKOUT' | 'ASTEROIDS' | 'DRIFT' | 'DEFENDER' | 'SETTINGS' | 'AI_CHAT' | 'RUNNER' | 'VAPORWARE' | 'CROSSWIRE' | 'BATTLE';
+export type GameId = 'SNAKE' | 'PONG' | 'BREAKOUT' | 'ASTEROIDS' | 'DRIFT' | 'DEFENDER' | 'SETTINGS' | 'AI_CHAT' | 'RUNNER' | 'VAPORWARE' | 'CROSSWIRE' | 'BATTLE' | 'LUNAR_LEM' | 'FLIP_FLOP';
 
 // --- SYSTEM: USER SESSION ---
 
