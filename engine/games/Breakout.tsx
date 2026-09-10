@@ -1,316 +1,366 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { GameCore, InputState, GameCoreHandle } from '../GameCore';
-import { useStore } from '../../store';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useGameStore } from '../../gameStore';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
+import { blockColor, createBreakoutBlocks, getBreakoutRules } from './breakout/breakoutConfig';
+import type { BreakoutBall, BreakoutBlock, BreakoutState } from './breakout/breakoutTypes';
 
+const makeBall = (level: number, direction = -1, x = 50): BreakoutBall => {
+  const speed = getBreakoutRules(level).ballSpeed;
+  const angle = 0.75 + ((level * 13) % 25) / 100;
+  return {
+    x,
+    y: 79,
+    vx: Math.cos(angle) * speed * (level % 2 ? 1 : -1),
+    vy: Math.sin(angle) * speed * direction,
+    radius: 1.15,
+    active: true,
+    trail: [],
+  };
+};
 
-interface Block {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    type: number;
-    hp: number;
-    active: boolean;
-    hex: string;
-}
-
-interface BreakoutState {
-    ball: { x: number; y: number; vx: number; vy: number };
-    paddle: { x: number; w: number };
-    blocks: Block[];
-    score: number;
-    level: number;
-    lives: number;
-    gameOver: boolean;
-    totalBlocks: number;
-    destroyedCount: number;
-}
+const createState = (level: number): BreakoutState => {
+  const rules = getBreakoutRules(level);
+  const blocks = createBreakoutBlocks(level);
+  return {
+    balls: [makeBall(level)],
+    paddle: { x: 50 - rules.paddleWidth / 2, w: rules.paddleWidth, energy: 0, overdrive: 0 },
+    blocks,
+    score: (level - 1) * 700,
+    level,
+    lives: rules.lives,
+    combo: 0,
+    bestCombo: 0,
+    gameOver: false,
+    destroyedCount: 0,
+    targetDestroyed: blocks.length,
+    elapsed: 0,
+    flash: 0,
+  };
+};
 
 const isBreakoutState = (value: unknown): value is BreakoutState => {
-    if (!value || typeof value !== 'object') return false;
-    const state = value as Partial<BreakoutState>;
-    return !!state.ball && !!state.paddle && Array.isArray(state.blocks)
-        && typeof state.score === 'number' && typeof state.level === 'number'
-        && typeof state.lives === 'number' && typeof state.gameOver === 'boolean'
-        && typeof state.totalBlocks === 'number' && typeof state.destroyedCount === 'number';
+  if (!value || typeof value !== 'object') return false;
+  const s = value as Partial<BreakoutState>;
+  return Array.isArray(s.balls) && Array.isArray(s.blocks) && !!s.paddle
+    && typeof s.score === 'number' && typeof s.level === 'number'
+    && typeof s.lives === 'number' && typeof s.gameOver === 'boolean'
+    && typeof s.destroyedCount === 'number' && typeof s.targetDestroyed === 'number';
 };
 
 export const BreakoutGame: React.FC = () => {
-    const updateStats = useGameStore(s => s.updateStats);
-    
-    const createBlocks = (level: number): Block[] => {
-        const blocks: Block[] = [];
-        const rows = Math.min(8, 4 + Math.floor(level / 2));
-        for(let r=0; r<rows; r++) {
-            for(let c=0; c<8; c++) {
-                const hex = "0x" + Math.floor(Math.random()*255).toString(16).toUpperCase();
-                let type = 1;
-                if (level > 1 && r < 2) type = 2;
-                if (level > 3 && r === 2) type = 3; 
-                
-                blocks.push({
-                    x: c * 12.5, y: r * 5 + 5, w: 11.5, h: 4, 
-                    type: type, 
-                    hp: type,
-                    active: true,
-                    hex: hex
-                });
-            }
-        }
-        return blocks;
-    };
+  const updateStats = useGameStore(s => s.updateStats);
+  const state = useRef<BreakoutState>(createState(1));
+  const [score, setScore] = useState(0);
+  const [level, setLevel] = useState(1);
+  const [gameOver, setGameOver] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-    const state = useRef<BreakoutState>({
-        ball: { x: 50, y: 80, vx: 50, vy: -50 },
-        paddle: { x: 40, w: 20 },
-        blocks: createBlocks(1),
-        score: 0,
-        level: 1,
-        lives: 3,
-        gameOver: false,
-        totalBlocks: 32,
-        destroyedCount: 0
+  const syncUi = (s: BreakoutState) => {
+    setScore(s.score);
+    setLevel(s.level);
+    setGameOver(s.gameOver);
+    setProgress(s.targetDestroyed > 0 ? s.destroyedCount / s.targetDestroyed : 0);
+  };
+
+  const reset = (startLevel = 1) => {
+    state.current = createState(Math.max(1, startLevel || 1));
+    syncUi(state.current);
+  };
+
+  const saveState = () => JSON.stringify(state.current);
+  const loadState = (data: string) => {
+    try {
+      const parsed: unknown = JSON.parse(data);
+      if (!isBreakoutState(parsed)) return;
+      state.current = parsed;
+      syncUi(parsed);
+    } catch {
+      // Ignore corrupted local saves.
+    }
+  };
+
+  const explodeNeighbors = (origin: BreakoutBlock, juice: GameCoreHandle) => {
+    const s = state.current;
+    s.blocks.forEach(block => {
+      if (!block.active || block.id === origin.id) return;
+      const dx = Math.abs(block.x - origin.x);
+      const dy = Math.abs(block.y - origin.y);
+      if (dx < 14 && dy < 6.5) {
+        block.hp = 1;
+        hitBlock(block, juice, true);
+      }
     });
-    
-    const [score, setScore] = useState(0);
-    const [level, setLevel] = useState(1);
-    const [gameOver, setGameOver] = useState(false);
-    const [levelProgress, setLevelProgress] = useState(0);
+  };
 
-    const reset = (startLevel: number = 1) => {
-        const lvl = startLevel || 1;
-        const newBlocks = createBlocks(lvl);
-        state.current = {
-            ball: { x: 50, y: 80, vx: 50 + (lvl * 10), vy: -50 - (lvl * 10) },
-            paddle: { x: 40, w: Math.max(10, 20 - lvl) },
-            blocks: newBlocks,
-            score: (lvl - 1) * 500,
-            level: lvl,
-            lives: 3,
-            gameOver: false,
-            totalBlocks: newBlocks.length,
-            destroyedCount: 0
-        };
-        setScore(state.current.score);
-        setLevel(lvl);
-        setGameOver(false);
-        setLevelProgress(0);
-    };
+  const hitBlock = (block: BreakoutBlock, juice: GameCoreHandle, chained = false) => {
+    const s = state.current;
+    if (!block.active) return;
 
-    const nextLevel = (juice: GameCoreHandle) => {
-        const s = state.current;
-        s.level++;
-        setLevel(s.level);
-        juice.levelUp(s.level, { targetsDestroyed: s.destroyedCount });
-        haptics.notificationSuccess();
-        
-        // Reset for next
-        s.blocks = createBlocks(s.level);
-        s.totalBlocks = s.blocks.length;
-        s.destroyedCount = 0;
-        s.ball = { x: 50, y: 80, vx: 50 + (s.level * 10), vy: -50 - (s.level * 10) };
-        s.paddle.w = Math.max(10, 20 - s.level);
-        setLevelProgress(0);
-    };
+    if (block.kind === 'SHIELD' && block.hp === block.maxHp) {
+      block.hp -= 1;
+      audio.playTone(360, 'square', 0.04, 0.07);
+      juice.addChromatic(4);
+      juice.emitParticles(block.x + block.w / 2, block.y + block.h / 2, blockColor(block.kind), 8);
+      return;
+    }
 
-    const saveState = () => {
-        return JSON.stringify(state.current);
-    };
+    block.hp -= 1;
+    if (block.hp > 0) {
+      audio.playClick();
+      juice.addShake(1);
+      return;
+    }
 
-    const loadState = (data: string) => {
-        try {
-            const loaded: unknown = JSON.parse(data);
-            if (!isBreakoutState(loaded)) return;
-            state.current = loaded;
-            setScore(loaded.score);
-            setLevel(loaded.level);
-            setGameOver(loaded.gameOver);
-            
-            // Recalc progress
-            const active = loaded.blocks.filter((b) => b.active).length;
-            const progress = 1 - (active / loaded.totalBlocks);
-            setLevelProgress(progress);
-        } catch(e) {}
-    };
+    block.active = false;
+    s.destroyedCount += 1;
+    s.combo += chained ? 2 : 1;
+    s.bestCombo = Math.max(s.bestCombo, s.combo);
+    const comboMultiplier = 1 + Math.min(2.5, s.combo * 0.08);
+    const base = block.kind === 'CORE' ? 180 : block.kind === 'ARMORED' ? 70 : block.kind === 'CORRUPT' ? 90 : 45;
+    s.score += Math.round(base * s.level * comboMultiplier);
+    s.paddle.energy = Math.min(100, s.paddle.energy + (block.kind === 'CORE' ? 18 : 5));
 
-    const destroyBlock = (index: number, juice: GameCoreHandle, s: BreakoutState) => {
-        const block = s.blocks[index];
-        if (!block.active) return;
+    audio.playExplosion();
+    haptics.impactMedium();
+    const color = blockColor(block.kind);
+    juice.emitParticles(block.x + block.w / 2, block.y + block.h / 2, color, block.kind === 'CORE' ? 28 : 14);
+    juice.addShake(block.kind === 'CORE' ? 7 : 2.5);
 
-        block.hp--;
-        if (block.hp <= 0) {
-            block.active = false;
-            s.score += block.type * 10 * s.level;
-            s.destroyedCount++;
-            
-            audio.playExplosion();
-            haptics.impactMedium();
-            const color = block.type === 3 ? '#f0f' : block.type === 2 ? '#ff0' : '#0f0';
-            juice.emitParticles(block.x + block.w/2, block.y + block.h/2, color, 12);
-            juice.addShake(block.type === 3 ? 5 : 2);
-            
-            // Update Progress
-            const activeBlocks = s.blocks.filter((b) => b.active).length;
-            const progress = 1 - (activeBlocks / s.totalBlocks);
-            setLevelProgress(progress);
+    if (block.kind === 'EXPLOSIVE') {
+      juice.addChromatic(12);
+      juice.triggerHitStop(65);
+      explodeNeighbors(block, juice);
+    }
+    if (block.kind === 'CORRUPT') {
+      s.paddle.w = Math.max(8, s.paddle.w * 0.88);
+      juice.addChromatic(16);
+      audio.playError();
+    }
+    if (block.kind === 'CORE') {
+      s.flash = 1;
+      juice.triggerHitStop(90);
+    }
 
-            if (block.type === 3) {
-                juice.addChromatic(10);
-                juice.triggerHitStop(50);
-                s.blocks.forEach((other, i) => {
-                    if (other.active && i !== index) {
-                        const dx = Math.abs(other.x - block.x);
-                        const dy = Math.abs(other.y - block.y);
-                        if (dx < 14 && dy < 6) {
-                            destroyBlock(i, juice, s);
-                        }
-                    }
-                });
-            }
-        } else {
-            audio.playClick();
-            juice.addShake(1);
-        }
-    };
+    syncUi(s);
+  };
 
-    const update = useCallback((dt: number, input: InputState, juice: GameCoreHandle) => {
-        const s = state.current;
-        if (s.gameOver) return;
+  const launchMultiball = (juice: GameCoreHandle) => {
+    const s = state.current;
+    if (s.balls.filter(ball => ball.active).length >= 3) return;
+    const source = s.balls.find(ball => ball.active);
+    if (!source) return;
+    s.balls.push({ ...makeBall(s.level, source.vy < 0 ? -1 : 1, source.x), y: source.y, trail: [] });
+    s.balls.push({ ...makeBall(s.level, source.vy < 0 ? -1 : 1, source.x), vx: -source.vx, y: source.y, trail: [] });
+    audio.playSuccess();
+    haptics.notificationSuccess();
+    juice.addChromatic(8);
+  };
 
-        if (s.blocks.every((b) => !b.active)) {
-            nextLevel(juice);
-            return;
-        }
+  const completeLevel = (juice: GameCoreHandle) => {
+    const s = state.current;
+    s.score += s.lives * 250 + s.bestCombo * 40;
+    setScore(s.score);
+    haptics.notificationSuccess();
+    juice.levelUp(s.level + 1, { targetsDestroyed: s.destroyedCount, score: s.score, bestCombo: s.bestCombo });
+  };
 
-        if (input.keys.has('ArrowLeft')) s.paddle.x -= 80 * dt;
-        if (input.keys.has('ArrowRight')) s.paddle.x += 80 * dt;
-        if (input.isTouching) {
-            s.paddle.x += input.touchDeltaX * 1.5;
-        }
-        s.paddle.x = Math.max(0, Math.min(100 - s.paddle.w, s.paddle.x));
+  const loseLife = (juice: GameCoreHandle) => {
+    const s = state.current;
+    s.lives -= 1;
+    s.combo = 0;
+    audio.playError();
+    haptics.notificationWarning();
+    juice.addShake(13);
+    juice.addChromatic(8);
+    if (s.lives <= 0) {
+      s.gameOver = true;
+      haptics.notificationError();
+      juice.triggerHitStop(180);
+      updateStats('BREAKOUT', s.score, s.level);
+      setGameOver(true);
+      return;
+    }
+    s.balls = [makeBall(s.level)];
+  };
 
-        s.ball.x += s.ball.vx * dt;
-        s.ball.y += s.ball.vy * dt;
+  const update = useCallback((dt: number, input: InputState, juice: GameCoreHandle) => {
+    const s = state.current;
+    if (s.gameOver) return;
+    const rules = getBreakoutRules(s.level);
+    s.elapsed += dt;
+    s.flash = Math.max(0, s.flash - dt * 2.6);
+    s.paddle.overdrive = Math.max(0, s.paddle.overdrive - dt);
 
-        if (s.ball.x <= 0 || s.ball.x >= 100) {
-            s.ball.vx *= -1;
-            juice.addShake(1);
-        }
-        if (s.ball.y <= 0) {
-            s.ball.vy *= -1;
-            juice.addShake(1);
-        }
+    if (input.keys.has('ArrowLeft')) s.paddle.x -= 82 * dt;
+    if (input.keys.has('ArrowRight')) s.paddle.x += 82 * dt;
+    if (input.isTouching) s.paddle.x += input.touchDeltaX * 1.35;
+    if ((input.keys.has('Space') || input.tapDetected) && s.paddle.energy >= 100) {
+      s.paddle.energy = 0;
+      s.paddle.overdrive = 5;
+      s.paddle.w = Math.min(28, s.paddle.w * 1.35);
+      launchMultiball(juice);
+    }
+    if (s.paddle.overdrive <= 0) s.paddle.w += (rules.paddleWidth - s.paddle.w) * Math.min(1, dt * 2.5);
+    s.paddle.x = Math.max(0, Math.min(100 - s.paddle.w, s.paddle.x));
 
-        if (s.ball.y >= 90 && s.ball.y <= 92 && s.ball.x >= s.paddle.x && s.ball.x <= s.paddle.x + s.paddle.w) {
-            s.ball.vy = -Math.abs(s.ball.vy); 
-            const hitPos = (s.ball.x - (s.paddle.x + s.paddle.w/2)) / (s.paddle.w/2);
-            s.ball.vx = hitPos * 100 * (1 + s.level * 0.1);
-            s.ball.y = 89.9;
-            audio.playKeystroke();
-            haptics.impactMedium();
-            juice.addShake(2);
-            juice.emitParticles(s.ball.x, s.ball.y, '#0ff', 5);
-        }
+    if (rules.movingRows) {
+      s.blocks.forEach(block => {
+        if (!block.active || !block.vx) return;
+        block.x += block.vx * dt;
+        if (block.x <= 0.5 || block.x + block.w >= 99.5) block.vx *= -1;
+      });
+    }
 
-        if (s.ball.y > 100) {
-            s.lives--;
-            if (s.lives <= 0) {
-                s.gameOver = true;
-                audio.playError();
-                haptics.notificationError();
-                juice.addShake(15);
-                juice.addChromatic(15);
-                juice.triggerHitStop(200);
-                updateStats('BREAKOUT', s.score, s.level);
-                setGameOver(true);
-            } else {
-                audio.playError();
-                haptics.notificationWarning();
-                s.ball = { x: 50, y: 80, vx: 50 + (s.level * 10), vy: -50 - (s.level * 10) };
-                juice.addChromatic(5);
-            }
-        }
+    for (const ball of s.balls) {
+      if (!ball.active) continue;
+      ball.trail.push({ x: ball.x, y: ball.y, alpha: 0.75 });
+      if (ball.trail.length > 16) ball.trail.shift();
+      ball.trail.forEach(point => { point.alpha = Math.max(0, point.alpha - dt * 2.2); });
 
-        s.blocks.forEach((b, i) => {
-            if (!b.active) return;
-            if (s.ball.x > b.x && s.ball.x < b.x + b.w && 
-                s.ball.y > b.y && s.ball.y < b.y + b.h) {
-                    s.ball.vy *= -1; 
-                    destroyBlock(i, juice, s);
-                    setScore(s.score);
-            }
-        });
+      const speedBoost = s.paddle.overdrive > 0 ? 1.08 : 1;
+      ball.x += ball.vx * dt * speedBoost;
+      ball.y += ball.vy * dt * speedBoost;
 
-    }, [updateStats]);
+      if (ball.x <= ball.radius || ball.x >= 100 - ball.radius) {
+        ball.vx *= -1;
+        ball.x = Math.max(ball.radius, Math.min(100 - ball.radius, ball.x));
+        audio.playTone(240, 'triangle', 0.025, 0.04);
+      }
+      if (ball.y <= ball.radius) {
+        ball.vy = Math.abs(ball.vy);
+        ball.y = ball.radius;
+      }
 
-    // ... (Draw function remains same) ...
-    const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-        const s = state.current;
-        const w = (val: number) => (val / 100) * width;
-        const h = (val: number) => (val / 100) * height;
+      if (ball.y >= 89 && ball.y <= 93 && ball.vy > 0 && ball.x >= s.paddle.x && ball.x <= s.paddle.x + s.paddle.w) {
+        const hit = (ball.x - (s.paddle.x + s.paddle.w / 2)) / (s.paddle.w / 2);
+        ball.vy = -Math.abs(ball.vy) * 1.015;
+        ball.vx += hit * 44;
+        ball.y = 88.8;
+        s.combo = Math.max(0, s.combo - 1);
+        audio.playKeystroke();
+        haptics.impactLight();
+        juice.emitParticles(ball.x, 90, '#00f3ff', 7);
+      }
 
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#0ff';
-        ctx.fillStyle = '#0ff';
-        ctx.fillRect(w(s.paddle.x), h(90), w(s.paddle.w), h(2));
-        ctx.fillStyle = '#000';
-        ctx.fillRect(w(s.paddle.x + 2), h(90.5), w(s.paddle.w - 4), h(1));
-        ctx.shadowBlur = 0;
+      for (const block of s.blocks) {
+        if (!block.active) continue;
+        if (ball.x + ball.radius < block.x || ball.x - ball.radius > block.x + block.w || ball.y + ball.radius < block.y || ball.y - ball.radius > block.y + block.h) continue;
+        const fromSide = Math.min(Math.abs(ball.x - block.x), Math.abs(ball.x - (block.x + block.w))) < Math.min(Math.abs(ball.y - block.y), Math.abs(ball.y - (block.y + block.h)));
+        if (fromSide) ball.vx *= -1; else ball.vy *= -1;
+        hitBlock(block, juice);
+        break;
+      }
 
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(w(s.ball.x), h(s.ball.y), w(1.5), 0, Math.PI*2);
-        ctx.fill();
+      if (ball.y > 103) ball.active = false;
+    }
 
-        ctx.font = '10px monospace';
-        ctx.textAlign = 'center';
-        
-        s.blocks.forEach((b) => {
-            if (!b.active) return;
-            const color = b.type === 3 ? '#f0f' : b.type === 2 ? '#ff0' : '#0f0';
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.fillStyle = color;
-            ctx.strokeRect(w(b.x), h(b.y), w(b.w), h(b.h));
-            ctx.globalAlpha = 0.2;
-            ctx.fillRect(w(b.x), h(b.y), w(b.w), h(b.h));
-            ctx.globalAlpha = 1.0;
-            if (width > 400) { 
-                ctx.fillStyle = color;
-                ctx.fillText(b.hex, w(b.x + b.w/2), h(b.y + b.h/2 + 2));
-            }
-        });
-        
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(`LIVES: ${s.lives}`, w(2), h(98));
-        ctx.textAlign = 'right';
-        ctx.fillText(`TARGETS: ${s.totalBlocks - s.destroyedCount}`, width - w(2), h(98));
+    if (s.balls.every(ball => !ball.active)) loseLife(juice);
+    else if (rules.multiball && s.paddle.energy >= 100 && s.balls.length === 1) launchMultiball(juice);
 
-    }, []);
+    if (s.blocks.every(block => !block.active)) completeLevel(juice);
+  }, [updateStats]);
 
-    const instructions = [
-        "DESTROY ALL DATA BLOCKS TO ADVANCE.",
-        "GREEN: SOFT DATA. YELLOW: REINFORCED. PURPLE: EXPLOSIVE.",
-        "DON'T LET THE BALL DROP.",
-        "LEVEL UP = FASTER BALL + MORE BLOCKS."
-    ];
+  const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const s = state.current;
+    const w = (v: number) => width * v / 100;
+    const h = (v: number) => height * v / 100;
 
-    return <GameCore 
-        gameId="BREAKOUT"
-        update={update} 
-        draw={draw} 
-        onReset={reset} 
-        isGameOver={gameOver} 
-        score={score}
-        level={level}
-        progress={levelProgress}
-        instructions={instructions}
-        onSave={saveState}
-        onLoad={loadState}
-    />;
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, 'rgba(0,243,255,0.06)');
+    gradient.addColorStop(0.55, 'rgba(5,5,8,0.02)');
+    gradient.addColorStop(1, 'rgba(255,0,85,0.05)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(0,243,255,0.055)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < 100; x += 5) { ctx.beginPath(); ctx.moveTo(w(x), 0); ctx.lineTo(w(x), height); ctx.stroke(); }
+    for (let y = 0; y < 100; y += 5) { ctx.beginPath(); ctx.moveTo(0, h(y)); ctx.lineTo(width, h(y)); ctx.stroke(); }
+
+    for (const block of s.blocks) {
+      if (!block.active) continue;
+      const color = blockColor(block.kind);
+      const pulse = 0.65 + Math.sin(s.elapsed * 4 + block.phase) * 0.2;
+      const bx = w(block.x), by = h(block.y), bw = w(block.w), bh = h(block.h);
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur = block.kind === 'CORE' ? 18 : 9;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = block.kind === 'CORE' ? 2.5 : 1.4;
+      ctx.globalAlpha = pulse;
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.08 + 0.13 * (block.hp / block.maxHp);
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(bx + 2, by + 2, Math.max(0, (bw - 4) * block.hp / block.maxHp), 1.5);
+      if (block.kind === 'SHIELD') {
+        ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.25; ctx.strokeRect(bx + 3, by + 3, bw - 6, bh - 6);
+      }
+      if (block.kind === 'CORRUPT') {
+        ctx.globalAlpha = 0.4;
+        ctx.fillRect(bx + ((Math.sin(s.elapsed * 13 + block.phase) + 1) * 0.5) * Math.max(1, bw - 4), by, 2, bh);
+      }
+      ctx.restore();
+    }
+
+    for (const ball of s.balls) {
+      if (!ball.active) continue;
+      ball.trail.forEach((trail, index) => {
+        ctx.fillStyle = `rgba(0,243,255,${trail.alpha * (index / Math.max(1, ball.trail.length)) * 0.45})`;
+        ctx.beginPath(); ctx.arc(w(trail.x), h(trail.y), w(0.25 + index * 0.025), 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.save();
+      ctx.shadowColor = s.paddle.overdrive > 0 ? '#f3ff00' : '#ffffff';
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(w(ball.x), h(ball.y), w(ball.radius), 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.save();
+    const paddleColor = s.paddle.overdrive > 0 ? '#f3ff00' : '#00f3ff';
+    ctx.shadowColor = paddleColor; ctx.shadowBlur = 18; ctx.fillStyle = paddleColor;
+    ctx.fillRect(w(s.paddle.x), h(90), w(s.paddle.w), h(1.8));
+    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.7; ctx.fillRect(w(s.paddle.x + 1), h(90.45), w(Math.max(0, s.paddle.w - 2)), h(0.28));
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(w(2), h(94.5), w(34), h(3));
+    ctx.strokeStyle = '#00f3ff'; ctx.strokeRect(w(2), h(94.5), w(34), h(3));
+    ctx.fillStyle = s.paddle.energy >= 100 ? '#f3ff00' : '#00f3ff';
+    ctx.fillRect(w(2), h(94.5), w(34 * s.paddle.energy / 100), h(3));
+
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#dffcff';
+    ctx.fillText(`LIVES ${s.lives}`, w(2), h(99));
+    ctx.textAlign = 'center'; ctx.fillStyle = s.combo >= 8 ? '#f3ff00' : '#00f3ff';
+    ctx.fillText(`COMBO x${s.combo}`, width / 2, h(99));
+    ctx.textAlign = 'right'; ctx.fillStyle = '#dffcff';
+    ctx.fillText(`BLOCKS ${s.targetDestroyed - s.destroyedCount}`, w(98), h(99));
+
+    if (s.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${s.flash * 0.16})`; ctx.fillRect(0, 0, width, height); }
+  }, []);
+
+  const instructions = useMemo(() => [
+    'BREAK THE DATA WALL. CLEAR EVERY ACTIVE BLOCK.',
+    'CYAN: DATA // YELLOW: ARMORED // MAGENTA: EXPLOSIVE.',
+    'VIOLET SHIELDS ABSORB A HIT. RED CORRUPTION SHRINKS YOUR PADDLE.',
+    'CHAIN HITS TO BUILD COMBO. FULL ENERGY TRIGGERS OVERDRIVE + MULTIBALL.',
+    'LATE NODES ADD MOVING ROWS, CORE BLOCKS AND COMBINED THREATS.',
+  ], []);
+
+  return <GameCore
+    gameId="BREAKOUT"
+    update={update}
+    draw={draw}
+    onReset={reset}
+    isGameOver={gameOver}
+    score={score}
+    level={level}
+    progress={progress}
+    instructions={instructions}
+    onSave={saveState}
+    onLoad={loadState}
+  />;
 };
