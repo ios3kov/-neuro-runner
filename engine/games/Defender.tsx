@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { GameCore, type GameCoreHandle, type InputState } from '../GameCore';
 import { useGameStore } from '../../gameStore';
+import { useStore } from '../../store';
 import { audio } from '../../utils/audio';
 import { haptics } from '../../utils/haptics';
 import { chooseDefenderEnemyKind, defenderEnemyColor, defenderEnemyHp, getDefenderRules } from './defender/defenderConfig';
 import type { DefenderEnemy, DefenderState } from './defender/defenderTypes';
+import { drawDefenderScene } from './defender/defenderRenderer';
 
 let enemySerial = 1;
 
@@ -40,6 +42,7 @@ const isDefenderState = (value: unknown): value is DefenderState => {
 
 export const DefenderGame: React.FC = () => {
   const updateStats = useGameStore(s => s.updateStats);
+  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);
   const state = useRef<DefenderState>(createState(1));
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -215,69 +218,8 @@ export const DefenderGame: React.FC = () => {
   }, [updateStats]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const s = state.current;
-    const rules = getDefenderRules(s.level);
-    const cx = width / 2;
-    const cy = height / 2;
-    const radius = Math.min(width, height) * 0.42;
-
-    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.35);
-    bg.addColorStop(0, 'rgba(0,243,255,0.08)');
-    bg.addColorStop(0.5, 'rgba(5,5,8,0.04)');
-    bg.addColorStop(1, 'rgba(255,0,85,0.055)');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    for (let ring = 1; ring <= 5; ring += 1) {
-      ctx.strokeStyle = `rgba(0,243,255,${0.025 + ring * 0.012})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(0, 0, radius * ring / 5, 0, Math.PI * 2); ctx.stroke();
-    }
-    for (let ray = 0; ray < 12; ray += 1) {
-      const angle = ray / 12 * Math.PI * 2 + s.time * 0.03;
-      ctx.strokeStyle = 'rgba(0,243,255,0.035)';
-      ctx.beginPath(); ctx.moveTo(Math.cos(angle) * 24, Math.sin(angle) * 24); ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); ctx.stroke();
-    }
-    ctx.restore();
-
-    s.enemies.forEach(enemy => {
-      const d = radius * enemy.dist / 100;
-      const x = cx + Math.cos(enemy.angle) * d;
-      const y = cy + Math.sin(enemy.angle) * d;
-      const color = defenderEnemyColor(enemy.kind);
-      const size = enemy.kind === 'BOSS' ? 13 : enemy.kind === 'HEAVY' ? 10 : enemy.kind === 'FAST' ? 6 : 8;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(enemy.rotation);
-      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = enemy.kind === 'BOSS' ? 18 : 8; ctx.lineWidth = enemy.kind === 'BOSS' ? 2.3 : 1.4;
-      ctx.globalAlpha = 0.85;
-      ctx.strokeRect(-size, -size, size * 2, size * 2);
-      ctx.globalAlpha = 0.12; ctx.fillRect(-size, -size, size * 2, size * 2);
-      if (enemy.kind === 'FAST') { ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.moveTo(-size * 1.6, 0); ctx.lineTo(size * 1.6, 0); ctx.stroke(); }
-      if (enemy.kind === 'CORRUPTED') { ctx.globalAlpha = 0.45; ctx.fillRect(-size * 1.5, Math.sin(s.time * 14 + enemy.id) * size, size * 3, 2); }
-      if (enemy.maxHp > 1) { ctx.globalAlpha = 0.5; ctx.fillRect(-size, size + 4, size * 2 * enemy.hp / enemy.maxHp, 2); }
-      ctx.restore();
-    });
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    const coreColor = s.hp < 35 ? '#ff0055' : '#00f3ff';
-    ctx.shadowColor = coreColor; ctx.shadowBlur = 22; ctx.strokeStyle = coreColor; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(0, 0, 20 + Math.sin(s.time * 6) * 3, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 0.16; ctx.fillStyle = coreColor; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
-    ctx.rotate(s.shieldAngle);
-    const shieldColor = s.shieldEnergy < 25 ? '#ff0055' : s.overcharge > 0 ? '#f3ff00' : '#ffffff';
-    ctx.globalAlpha = 1; ctx.strokeStyle = shieldColor; ctx.shadowColor = shieldColor; ctx.shadowBlur = 16; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.arc(0, 0, radius * 0.3, -rules.shieldArc / 2, rules.shieldArc / 2); ctx.stroke();
-    ctx.restore();
-
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left'; ctx.fillStyle = '#dffcff'; ctx.fillText(`CORE ${Math.max(0, Math.round(s.hp))}%`, 12, height - 30);
-    ctx.fillStyle = s.shieldEnergy < 25 ? '#ff0055' : '#00f3ff'; ctx.fillText(`SHIELD ${Math.round(s.shieldEnergy)}%`, 12, height - 14);
-    ctx.textAlign = 'center'; ctx.fillStyle = s.combo >= 8 ? '#f3ff00' : '#00f3ff'; ctx.fillText(`CHAIN x${s.combo}`, cx, height - 14);
-    ctx.textAlign = 'right'; ctx.fillStyle = '#dffcff'; ctx.fillText(`SURVIVE ${Math.max(0, s.duration - s.time).toFixed(1)}s`, width - 12, height - 14);
-  }, []);
+    drawDefenderScene(ctx, state.current, width, height, { lowPowerMode });
+  }, [lowPowerMode]);
 
   const instructions = useMemo(() => [
     'ROTATE THE SHIELD WITH LEFT/RIGHT OR HORIZONTAL TOUCH.',
