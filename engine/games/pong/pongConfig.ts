@@ -15,11 +15,13 @@ export const pongModeForLevel = (level: number): ArenaMode => {
 };
 
 export const pongPaddleWidthForLevel = (level: number) => {
-  if (level >= 19) return 10;
-  if (level >= 16) return 11;
-  if (level >= 10) return 13;
-  return 15;
+  if (level >= 19) return 13;
+  if (level >= 16) return 13.5;
+  if (level >= 10) return 14.5;
+  return 16;
 };
+
+export const pongServeSpeedForLevel = (level: number) => Math.min(158, 76 + level * 4.1);
 
 export const buildPongBarriers = (level: number): Barrier[] => {
   if ((level >= 4 && level <= 6) || (level >= 13 && level <= 15) || level >= 19) {
@@ -35,14 +37,14 @@ export const buildPongBarriers = (level: number): Barrier[] => {
 export const createPongState = (level: number): PongState => {
   const safeLevel = Math.max(1, Math.min(20, level || 1));
   const paddleWidth = pongPaddleWidthForLevel(safeLevel);
-  const baseSpeed = 78 + safeLevel * 4.8;
+  const baseSpeed = pongServeSpeedForLevel(safeLevel);
   return {
     ball: {
       x: 50,
       y: 50,
-      vx: (Math.random() > 0.5 ? 1 : -1) * (28 + Math.random() * 34),
+      vx: (Math.random() > 0.5 ? 1 : -1) * (26 + Math.random() * 30),
       vy: (Math.random() > 0.5 ? 1 : -1) * baseSpeed,
-      size: safeLevel >= 16 ? 1.35 : 1.6,
+      size: safeLevel >= 16 ? 1.5 : 1.7,
     },
     p1: { x: 50 - paddleWidth / 2, w: paddleWidth, score: 0 },
     p2: { x: 50 - paddleWidth / 2, w: paddleWidth, score: 0 },
