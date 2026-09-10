@@ -11,7 +11,7 @@ export const CORE_STORE_CONSTANTS = {
 export const DEFAULT_SETTINGS: UserSession['settings'] = {
   soundEnabled: true,
   musicEnabled: true,
-  showHidden: true,
+  showHidden: false,
   hapticsEnabled: true,
   lowPowerMode: false,
 };
