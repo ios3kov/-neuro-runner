@@ -15,11 +15,13 @@ import {
 } from './snake/snakeTypes';
 import { createInitialSnakeState, getSnakeProfile } from './snake/snakeConfig';
 import { buildSnakeArena } from './snake/snakeLevelBuilder';
+import { drawSnakeScene } from './snake/snakeRenderer';
 
 const same = (a: SnakePoint, b: SnakePoint) => a.x === b.x && a.y === b.y;
 
 export const SnakeGame: React.FC = () => {
   const addLog = useStore((s) => s.addLog);
+  const lowPowerMode = useStore((s) => s.user.settings.lowPowerMode ?? false);
   const updateStats = useGameStore((s) => s.updateStats);
   const state = useRef<SnakeState>(createInitialSnakeState());
 
@@ -290,97 +292,8 @@ export const SnakeGame: React.FC = () => {
   }, [addLog, die, eat]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const s = state.current;
-    const profile = getSnakeProfile(s.level);
-    const cell = Math.max(6, Math.floor(Math.min(width, height) / SNAKE_GRID_W));
-    const boardW = cell * SNAKE_GRID_W;
-    const boardH = cell * SNAKE_GRID_H;
-    const ox = (width - boardW) / 2;
-    const oy = (height - boardH) / 2;
-
-    ctx.save();
-    ctx.fillStyle = '#020608';
-    ctx.fillRect(ox, oy, boardW, boardH);
-    if (s.virusEffect === 'VIDEO_DRIVER_FAIL') ctx.translate((Math.random() - 0.5) * 5, 0);
-
-    ctx.strokeStyle = 'rgba(0,240,255,0.055)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i <= SNAKE_GRID_W; i += 1) { ctx.moveTo(ox + i * cell, oy); ctx.lineTo(ox + i * cell, oy + boardH); }
-    for (let i = 0; i <= SNAKE_GRID_H; i += 1) { ctx.moveTo(ox, oy + i * cell); ctx.lineTo(ox + boardW, oy + i * cell); }
-    ctx.stroke();
-
-    s.zones.forEach((zone) => {
-      const pulse = 0.09 + Math.sin(s.animTime * 8) * 0.035;
-      ctx.fillStyle = `rgba(255,170,0,${pulse})`;
-      ctx.fillRect(ox + zone.x * cell, oy + zone.y * cell, zone.w * cell, zone.h * cell);
-      ctx.strokeStyle = s.inOverclock ? '#ffd740' : 'rgba(255,170,0,.4)';
-      ctx.lineWidth = s.inOverclock ? 2 : 1;
-      ctx.strokeRect(ox + zone.x * cell, oy + zone.y * cell, zone.w * cell, zone.h * cell);
-    });
-
-    ctx.fillStyle = '#073338';
-    s.walls.forEach((value) => { ctx.fillRect(ox + value.x * cell + 1, oy + value.y * cell + 1, cell - 2, cell - 2); });
-    s.gates.forEach((gate) => {
-      const x = ox + gate.x * cell;
-      const y = oy + gate.y * cell;
-      ctx.fillStyle = gate.active ? `rgba(255,23,68,${0.5 + Math.sin(s.animTime * 10) * 0.2})` : '#252a2b';
-      ctx.shadowColor = gate.active ? '#ff1744' : 'transparent';
-      ctx.shadowBlur = gate.active ? 10 : 0;
-      ctx.fillRect(x + 2, y + 2, cell - 4, cell - 4);
-      ctx.shadowBlur = 0;
-    });
-    s.tunnels.forEach((tunnel) => {
-      const x = ox + tunnel.x * cell;
-      const y = oy + tunnel.y * cell;
-      ctx.strokeStyle = '#448aff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 2, y + 2, cell - 4, cell - 4);
-      ctx.strokeRect(x + 5, y + 5, Math.max(1, cell - 10), Math.max(1, cell - 10));
-    });
-
-    const drawItem = (point: SnakePoint, type: SnakeFoodType | 'KEY') => {
-      const cx = ox + (point.x + 0.5) * cell;
-      const cy = oy + (point.y + 0.5) * cell;
-      ctx.save();
-      ctx.translate(cx, cy);
-      const pulse = 0.85 + Math.sin(s.animTime * 7) * 0.12;
-      ctx.scale(pulse, pulse);
-      if (type === 'DATA') { ctx.fillStyle = '#00ff88'; ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(0, 0, cell * 0.25, 0, Math.PI * 2); ctx.fill(); }
-      if (type === 'VIRUS') { ctx.fillStyle = '#ff1744'; ctx.shadowColor = '#ff1744'; ctx.shadowBlur = 13; ctx.fillRect(-cell * 0.3, -cell * 0.3, cell * 0.6, cell * 0.6); }
-      if (type === 'ZIP') { ctx.fillStyle = '#448aff'; ctx.shadowColor = '#448aff'; ctx.shadowBlur = 12; ctx.fillRect(-cell * 0.32, -cell * 0.12, cell * 0.64, cell * 0.24); ctx.fillRect(-cell * 0.12, -cell * 0.32, cell * 0.24, cell * 0.64); }
-      if (type === 'LOCKED_DATA') { ctx.strokeStyle = s.hasKey ? '#00ff88' : '#ff1744'; ctx.lineWidth = 2; ctx.strokeRect(-cell * 0.3, -cell * 0.05, cell * 0.6, cell * 0.45); ctx.beginPath(); ctx.arc(0, -cell * 0.05, cell * 0.2, Math.PI, 0); ctx.stroke(); }
-      if (type === 'KEY') { ctx.fillStyle = '#ffd740'; ctx.shadowColor = '#ffd740'; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(-cell * 0.12, 0, cell * 0.18, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(0, -cell * 0.07, cell * 0.34, cell * 0.14); }
-      ctx.restore();
-    };
-
-    if (s.keyItem) drawItem(s.keyItem, 'KEY');
-    drawItem(s.food, s.food.type);
-
-    s.snake.forEach((value, index) => {
-      const x = ox + value.x * cell;
-      const y = oy + value.y * cell;
-      const alpha = Math.max(0.22, 1 - index / Math.max(6, s.snake.length));
-      ctx.fillStyle = s.virusEffect === 'NONE' ? `rgba(0,240,255,${alpha})` : `rgba(255,60,80,${alpha})`;
-      if (index === 0) { ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 14; }
-      ctx.fillRect(x + (index ? 2 : 1), y + (index ? 2 : 1), cell - (index ? 4 : 2), cell - (index ? 4 : 2));
-      ctx.shadowBlur = 0;
-    });
-
-    ctx.font = 'bold 11px monospace';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = '#00ff88';
-    ctx.textAlign = 'left';
-    ctx.fillText(s.sandbox ? 'SANDBOX // ENDLESS' : `DATA ${s.itemsCollected}/${s.target}`, ox + 6, oy + 6);
-    ctx.fillStyle = '#00bcd4';
-    ctx.textAlign = 'right';
-    ctx.fillText(profile.label, ox + boardW - 6, oy + 6);
-    if (s.combo > 1) { ctx.fillStyle = '#ffd740'; ctx.textAlign = 'left'; ctx.fillText(`COMBO x${Math.min(5, 1 + Math.floor((s.combo - 1) / 3))}`, ox + 6, oy + 21); }
-    if (s.hasKey) { ctx.fillStyle = '#ffd740'; ctx.textAlign = 'right'; ctx.fillText('2FA KEY READY', ox + boardW - 6, oy + 21); }
-    if (s.virusEffect !== 'NONE') { ctx.fillStyle = '#ff1744'; ctx.textAlign = 'center'; ctx.fillText(`${s.virusEffect} ${s.virusTimer.toFixed(1)}s`, ox + boardW / 2, oy + boardH - 18); }
-    if (s.inOverclock) { ctx.fillStyle = '#ffab00'; ctx.textAlign = 'center'; ctx.fillText('OVERCLOCK // 162%', ox + boardW / 2, oy + boardH - 32); }
-    ctx.restore();
-  }, []);
+    drawSnakeScene(ctx, state.current, width, height, { lowPowerMode });
+  }, [lowPowerMode]);
 
   const instructions = useMemo(() => [
     'SWIPE OR USE ARROWS / WASD TO ROUTE SERPENT.',
