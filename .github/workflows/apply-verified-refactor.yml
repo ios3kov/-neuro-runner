@@ -1,0 +1,81 @@
+name: Apply verified refactor
+
+on:
+  push:
+    branches: [refactor-verified-v2-2026-09-10]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reassemble verified source archive
+        shell: bash
+        run: |
+          cat \
+            .refactor-payload/part00 \
+            .refactor-payload/part01 \
+            .refactor-payload/part02 \
+            .refactor-payload/part03 \
+            .refactor-payload/p4_00 \
+            .refactor-payload/p4_01 \
+            .refactor-payload/p4_02 \
+            .refactor-payload/p4_03 \
+            .refactor-payload/p4_04 \
+            .refactor-payload/p4_05 \
+            .refactor-payload/p4_06 \
+            .refactor-payload/p4_07 \
+            .refactor-payload/p4_08 \
+            .refactor-payload/p5_00 \
+            .refactor-payload/p5_01 \
+            .refactor-payload/p5_02 \
+            .refactor-payload/p5_03 \
+            .refactor-payload/p5_04 \
+            .refactor-payload/p5_05 \
+            .refactor-payload/p5_06 \
+            .refactor-payload/p5_07 \
+            .refactor-payload/p5_08 > /tmp/source.b64
+          test "$(wc -c < /tmp/source.b64)" -eq 99192
+          base64 -d /tmp/source.b64 > /tmp/source.tar.xz
+          xz -t /tmp/source.tar.xz
+          mkdir -p /tmp/refactor
+          tar -xJf /tmp/source.tar.xz -C /tmp/refactor
+
+      - name: Replace working tree with refactored source
+        shell: bash
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/refactor/. .
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Lock dependencies
+        run: npm install --package-lock-only --no-audit --no-fund
+
+      - name: Install exactly from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit verified refactor
+        shell: bash
+        run: |
+          rm -rf node_modules dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Refactor mobile runtime and add regression tests"
+          git push
