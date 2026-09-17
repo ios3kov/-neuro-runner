@@ -1,129 +1,66 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { useStore } from '../store';
 import { AppState } from '../types';
+import { TELEGRAM_READY } from '../utils/telegramBootstrap';
 
-export interface TelegramOptions {
-    orientation?: boolean;
-    backButton?: boolean;
-    closingConfirmation?: boolean;
-}
-
-// Stable default object to avoid effect re-triggering
-const DEFAULT_OPTS: Required<TelegramOptions> = {
-    orientation: true,
-    backButton: true,
-    closingConfirmation: true
+type Bridge = {
+  viewportHeight?: number; contentSafeAreaInset?: Partial<Record<'top'|'right'|'bottom'|'left',number>>;
+  ready?: () => void; expand?: () => void; setHeaderColor?: (color:string)=>void; setBackgroundColor?: (color:string)=>void;
+  enableClosingConfirmation?:()=>void; disableClosingConfirmation?:()=>void;
+  isVersionAtLeast?: (version:string)=>boolean;
+  onEvent?: (name:string, callback:()=>void)=>void; offEvent?: (name:string,callback:()=>void)=>void;
+  BackButton?: { show:()=>void; hide:()=>void };
 };
+const attempt = (action:()=>void) => { try { action(); } catch { /* Older Telegram clients fall back to browser controls. */ } };
 
-export const useTelegram = (options: TelegramOptions = DEFAULT_OPTS) => {
-    const appState = useStore((s) => s.appState);
-    const [isLandscape, setIsLandscape] = useState(false);
-    
-    // Ref to track if options actually changed (deep check optimization if needed, 
-    // but here we just rely on the stable reference passed or default)
-    const opts = { ...DEFAULT_OPTS, ...options };
-
-    // --- ORIENTATION LOCK & LANDSCAPE BLOCKER ---
-    useEffect(() => {
-        if (!opts.orientation) return;
-
-        const handleOrientation = () => {
-            const tg = window.Telegram?.WebApp;
-            const platform = tg?.platform || 'unknown';
-            
-            // Filter for strict mobile platforms (Android/iOS)
-            const isMobile = 
-                platform === 'android' || 
-                platform === 'ios' || 
-                ((!tg || platform === 'unknown') && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
-
-            const isLand = window.matchMedia('(orientation: landscape)').matches;
-            
-            setIsLandscape(isMobile && isLand);
-
-            if (tg && isMobile) {
-                // Orientation Lock only on mobile
-                if (!isLand && tg.lockOrientation) {
-                    tg.lockOrientation();
-                }
-            }
-        };
-
-        // Initial Check
-        handleOrientation();
-
-        // Listeners
-        const mq = window.matchMedia('(orientation: landscape)');
-        const mqHandler = (e: MediaQueryListEvent) => {
-            handleOrientation();
-        };
-
-        mq.addEventListener('change', mqHandler);
-        window.addEventListener('resize', handleOrientation);
-
-        return () => {
-            mq.removeEventListener('change', mqHandler);
-            window.removeEventListener('resize', handleOrientation);
-        };
-    }, [opts.orientation]);
-
-    // --- NATIVE CLOSING CONFIRMATION SYNC ---
-    useEffect(() => {
-        if (!opts.closingConfirmation) return;
-
-        const tg = window.Telegram?.WebApp;
-        if (!tg) return;
-
-        // Enable native closing confirmation when logged in
-        if (appState === AppState.BOOT || appState === AppState.LOGIN) {
-            if (tg.disableClosingConfirmation) tg.disableClosingConfirmation();
-        } else {
-            if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
+export function useTelegram() {
+  useEffect(() => {
+    let disconnect = () => {};
+    const connect = () => {
+      disconnect();
+      const tg = window.Telegram?.WebApp as unknown as Bridge | undefined;
+      const updateViewport = () => {
+        const vv = window.visualViewport;
+        // Pinch zoom changes visualViewport.scale, not the application's logical layout.
+        if (vv && vv.scale !== 1) return;
+        const height = tg?.viewportHeight || vv?.height || window.innerHeight;
+        if (height > 0) document.documentElement.style.setProperty('--tg-viewport-height', `${height}px`);
+        for (const side of ['top','right','bottom','left'] as const) {
+          const value = tg?.contentSafeAreaInset?.[side];
+          if (typeof value === 'number' && value >= 0) document.documentElement.style.setProperty(`--tg-safe-area-${side}`, `max(env(safe-area-inset-${side}, 0px), ${value}px)`);
         }
-    }, [appState, opts.closingConfirmation]);
-
-    // --- BACK BUTTON HANDLING ---
-    useEffect(() => {
-        if (!opts.backButton) return;
-
-        const tg = window.Telegram?.WebApp;
-        
-        const handleBackBtn = () => {
-            // Unified Back Dispatcher
-            useStore.getState().handleGoBack();
-        };
-
-        if (tg) tg.onEvent('backButtonClicked', handleBackBtn);
-
-        // Subscribe to store updates for Button Visibility logic
-        const updateVisibility = () => {
-            if (!tg) return;
-            const state = useStore.getState();
-            
-            // Show Back Button if:
-            // 1. In Game or Settings
-            // 2. Overlay is open (Auth, Stats, Exit)
-            // 3. File Viewer is open
-            // 4. Navigation depth > 1
-            
-            const shouldShow = 
-                state.appState === AppState.GAME || 
-                state.appState === AppState.SETTINGS ||
-                state.activeModal !== 'NONE' ||
-                state.openedFileId !== null ||
-                state.navigationPath.length > 1;
-
-            if (shouldShow) tg.BackButton.show(); else tg.BackButton.hide();
-        };
-
-        const unsub = useStore.subscribe(updateVisibility);
-        updateVisibility(); // Initial check
-
-        return () => {
-            if (tg) tg.offEvent('backButtonClicked', handleBackBtn);
-            unsub();
-        };
-    }, [opts.backButton]);
-
-    return { isLandscape };
-};
+      };
+      const back = () => useStore.getState().handleGoBack();
+      let last = '';
+      const sync = () => {
+        if (!tg) return;
+        const state = useStore.getState();
+        const active = state.appState !== AppState.BOOT && state.appState !== AppState.LOGIN;
+        const showBack = active && (state.appState !== AppState.DESKTOP || state.activeModal !== 'NONE' || !!state.openedFileId || state.navigationPath.length > 1);
+        const next = `${active}/${showBack}`;
+        if (last === next) return;
+        last = next;
+        attempt(() => { if (tg.isVersionAtLeast?.('6.1')) showBack ? tg.BackButton?.show() : tg.BackButton?.hide(); });
+        attempt(() => { if (tg.isVersionAtLeast?.('6.2')) active ? tg.enableClosingConfirmation?.() : tg.disableClosingConfirmation?.(); });
+      };
+      attempt(() => { tg?.ready?.(); tg?.expand?.(); tg?.setHeaderColor?.('#050b10'); tg?.setBackgroundColor?.('#050b10'); });
+      const events = ['viewportChanged','safeAreaChanged','contentSafeAreaChanged'];
+      events.forEach(name => attempt(() => tg?.onEvent?.(name, updateViewport)));
+      attempt(() => tg?.onEvent?.('backButtonClicked', back));
+      const unsubscribe = useStore.subscribe(sync);
+      window.addEventListener('resize', updateViewport);
+      window.visualViewport?.addEventListener('resize', updateViewport);
+      updateViewport(); sync();
+      disconnect = () => {
+        unsubscribe();
+        window.removeEventListener('resize', updateViewport);
+        window.visualViewport?.removeEventListener('resize', updateViewport);
+        events.forEach(name => attempt(() => tg?.offEvent?.(name, updateViewport)));
+        attempt(() => tg?.offEvent?.('backButtonClicked', back));
+      };
+    };
+    connect();
+    window.addEventListener(TELEGRAM_READY, connect);
+    return () => { disconnect(); window.removeEventListener(TELEGRAM_READY, connect); };
+  }, []);
+}

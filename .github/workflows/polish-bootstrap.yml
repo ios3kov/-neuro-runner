@@ -1,0 +1,53 @@
+name: Prepare production polish
+on:
+  push:
+    branches: [audit/production-polish-2026-09-18]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.event.head_commit.message == 'chore: prepare polish implementation and regression gates'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify original state defects fail the new regression tests
+        run: |
+          set +e
+          npm test -- tests/productionRegressions.test.ts > /tmp/regression-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/regression-red.log
+          test "$status" -ne 0
+          grep -q 'production state regressions' /tmp/regression-red.log
+      - run: python3 scripts/apply-production-polish.py
+      - name: Refresh dependencies and lockfile with npm
+        run: |
+          npm install --save-dev --save-exact vitest@4.1.11 wrangler@4.134.0 tailwindcss@3.4.17 postcss@8.5.6 autoprefixer@10.4.21 tailwindcss-animate@1.0.7 eslint@9 @typescript-eslint/parser@8 prettier@3
+          npm install --save-exact @fontsource/share-tech-mono@5 @fontsource/jetbrains-mono@5
+          npm pkg set 'scripts.lint=eslint .' 'scripts.format:check=prettier --check App.tsx index.tsx styles.css components/Dialog.tsx state/persistedCore.ts utils/safeStorage.ts'
+      - name: Format only files changed by this audit
+        run: |
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMR 291b7c0f527cd0901810b2db87e5909ad5376ab8 -- '*.ts' '*.tsx' '*.css' '*.mjs' '*.cjs' '*.json' '*.yml' '*.md')
+          npx prettier --write "${files[@]}"
+      - name: Verify implementation
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run build
+          npm audit --audit-level=moderate
+          git diff --check
+      - name: Commit verified generated lockfile and scoped source migration
+        run: |
+          test "$(git ls-remote origin refs/heads/audit/production-polish-2026-09-18 | cut -f1)" = "$GITHUB_SHA"
+          git add -u
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix: harden state and verify compiled production shell'
+          git push origin HEAD:audit/production-polish-2026-09-18
