@@ -1,6 +1,0 @@
-Source: https://github.com/hajunho/zeli-web-games
-Imported from commit: ba9938eb222cb588ae7b0a6056ba6bdda89dcd9c
-Directory: src/games/arcade
-Imported arcade components: 15
-License: Apache-2.0
-Neuro Runner changes: host/EXIT shell and application registration only; game components are vendored as the upstream arcade implementations.

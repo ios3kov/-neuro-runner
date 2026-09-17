@@ -4,6 +4,7 @@ import { useStore } from '../store';
 import type { FileNode, ViewMode } from '../types';
 import { audio } from '../utils/audio';
 import { haptics } from '../utils/haptics';
+import { activateFileNode } from '../utils/fileActivation';
 import { AuthModal } from './modals/AuthModal';
 import { ExitConfirmModal } from './modals/ExitConfirmModal';
 import { StatsModal } from './modals/StatsModal';
@@ -106,15 +107,12 @@ export const FileSystem: React.FC = () => {
   }, [currentFolder.children, navigationPath.length, showHidden]);
 
   const executeNode = useCallback((node: FileNode) => {
-    if (node.type === 'FOLDER') {
-      navigateDown(node.id);
-      return;
-    }
-    if (node.type === 'EXE' && node.gameId) {
-      startGame(node.gameId);
-      return;
-    }
-    setOpenedFileId(node.id);
+    activateFileNode(node, {
+      navigateDown,
+      startGame,
+      openFile: setOpenedFileId,
+      openExternalUrl: (url) => window.location.assign(url),
+    });
   }, [navigateDown, setOpenedFileId, startGame]);
 
   const handleNavigate = useCallback((node: FileNode) => {

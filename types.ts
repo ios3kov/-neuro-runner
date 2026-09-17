@@ -94,11 +94,7 @@ export interface GameProgress {
 
 export type GameId =
   | 'SNAKE' | 'PONG' | 'BREAKOUT' | 'ASTEROIDS' | 'DRIFT' | 'DEFENDER'
-  | 'SETTINGS' | 'AI_CHAT' | 'RUNNER' | 'VAPORWARE' | 'CROSSWIRE' | 'BATTLE' | 'LUNAR_LEM' | 'FLIP_FLOP'
-  | 'ZELI_ASTEROIDS' | 'ZELI_BOMBERMAN' | 'ZELI_BREAKOUT' | 'ZELI_DIGDUG'
-  | 'ZELI_DONKEY_KONG' | 'ZELI_FLAPPY_JELLY' | 'ZELI_FROGGER' | 'ZELI_GALAGA'
-  | 'ZELI_JUMP_MAN' | 'ZELI_JUMP_RUNNER' | 'ZELI_MINI_PACMAN' | 'ZELI_MINI_TETRIS'
-  | 'ZELI_PING_PONG' | 'ZELI_SNAKE' | 'ZELI_SPACE_INVADER';
+  | 'SETTINGS' | 'AI_CHAT' | 'RUNNER' | 'VAPORWARE' | 'CROSSWIRE' | 'BATTLE' | 'LUNAR_LEM' | 'FLIP_FLOP';
 
 export interface UserSettings {
   soundEnabled: boolean;
@@ -130,6 +126,7 @@ export interface FileNode {
   type: 'FOLDER' | 'EXE';
   children?: FileNode[];
   gameId?: GameId;
+  externalUrl?: string;
   description?: string;
   isPasswordProtected?: boolean;
   isHidden?: boolean;

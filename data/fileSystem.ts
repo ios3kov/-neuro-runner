@@ -10,21 +10,9 @@ const f = (id: string, name: string, desc: string, gameId?: GameId, rest: Partia
 
 export const fileSystemData: FileNode = d('root', 'ROOT', [
   d('arcade', 'ARCADE', [
-    f('z_ast', 'ASTEROIDS.EXE', 'Zeli Arcade', 'ZELI_ASTEROIDS'),
-    f('z_bomb', 'BOMBERMAN.EXE', 'Zeli Arcade', 'ZELI_BOMBERMAN'),
-    f('z_break', 'BREAKOUT.EXE', 'Zeli Arcade', 'ZELI_BREAKOUT'),
-    f('z_dig', 'DIG_DUG.EXE', 'Zeli Arcade', 'ZELI_DIGDUG'),
-    f('z_dk', 'DONKEY_KONG.EXE', 'Zeli Arcade', 'ZELI_DONKEY_KONG'),
-    f('z_flappy', 'FLAPPY_JELLY.EXE', 'Zeli Arcade', 'ZELI_FLAPPY_JELLY'),
-    f('z_frog', 'FROGGER.EXE', 'Zeli Arcade', 'ZELI_FROGGER'),
-    f('z_galaga', 'GALAGA.EXE', 'Zeli Arcade', 'ZELI_GALAGA'),
-    f('z_jumpman', 'JUMP_MAN.EXE', 'Zeli Arcade', 'ZELI_JUMP_MAN'),
-    f('z_jumprun', 'JUMP_RUNNER.EXE', 'Zeli Arcade', 'ZELI_JUMP_RUNNER'),
-    f('z_pac', 'MINI_PACMAN.EXE', 'Zeli Arcade', 'ZELI_MINI_PACMAN'),
-    f('z_tetris', 'MINI_TETRIS.EXE', 'Zeli Arcade', 'ZELI_MINI_TETRIS'),
-    f('z_pong', 'PING_PONG.EXE', 'Zeli Arcade', 'ZELI_PING_PONG'),
-    f('z_snake', 'SNAKE.EXE', 'Zeli Arcade', 'ZELI_SNAKE'),
-    f('z_invader', 'SPACE_INVADER.EXE', 'Zeli Arcade', 'ZELI_SPACE_INVADER')
+    f('cat_territory', 'CAT_TERRITORY.EXE', 'Play at meow.neurospace.tech', undefined, {
+      externalUrl: 'https://meow.neurospace.tech'
+    })
   ]),
   d('downloads', 'DOWNLOADS', [
     f('arch', 'ARCHIVE_MGR.EXE', 'Unpack Data'),
@@ -86,11 +74,7 @@ export const getFileContent = (id: string) =>
 const ICONS: Record<string, string> = {
   personal: '🔞', trash: '🗑️', AI_CHAT: '👁️', SETTINGS: '⚙️',
   copyright: '®', passwords: '🔒', FOLDER: '📁', EXE: '💾', epstein: '✈️',
-  downloads: '📥', blueprint: '📐', music: '🎵',
-  ZELI_ASTEROIDS: '☄️', ZELI_BOMBERMAN: '💣', ZELI_BREAKOUT: '🧱', ZELI_DIGDUG: '⛏️',
-  ZELI_DONKEY_KONG: '🛢️', ZELI_FLAPPY_JELLY: '🪼', ZELI_FROGGER: '🐸', ZELI_GALAGA: '👾',
-  ZELI_JUMP_MAN: '⬆️', ZELI_JUMP_RUNNER: '🏃', ZELI_MINI_PACMAN: '🟡', ZELI_MINI_TETRIS: '🧩',
-  ZELI_PING_PONG: '🏓', ZELI_SNAKE: '🐍', ZELI_SPACE_INVADER: '🛸'
+  downloads: '📥', blueprint: '📐', music: '🎵', cat_territory: '🐱'
 };
 
 export const getIcon = (node: FileNode & { isParentLink?: boolean }) => {
