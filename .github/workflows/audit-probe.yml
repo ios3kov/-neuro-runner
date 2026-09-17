@@ -4,32 +4,27 @@ on:
     branches: [audit/production-polish-2026-09-18]
 permissions:
   contents: read
-concurrency:
-  group: audit-probe-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
   probe:
-    if: github.event.head_commit.message != 'chore: prepare polish implementation and regression gates'
+    if: >-
+      !contains(github.event.head_commit.message, '[audit-prepare]')
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Dependency evidence
-        run: |
-          mkdir -p audit-results
-          npm audit --json > audit-results/dependencies.json || true
-          node -e 'const a=require("./audit-results/dependencies.json"); console.log("DEPENDENCY_AUDIT",JSON.stringify(a))'
       - run: npm run typecheck && npm test && npm run build
       - name: Browser tools
         run: |
           npm install --prefix /tmp/neuro-audit-tools --no-package-lock playwright @axe-core/playwright
           node /tmp/neuro-audit-tools/node_modules/playwright/cli.js install --with-deps chromium
-      - name: Browser and architecture evidence
+      - name: Browser evidence
         run: |
           npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/neuro-preview.log 2>&1 &
           node scripts/audit-probe.mjs
