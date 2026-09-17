@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppState, type GameId } from '../types';
-vi.mock('../utils/audio',()=>({audio:new Proxy({}, {get:()=>vi.fn()})}));
-vi.mock('../utils/haptics',()=>({haptics:new Proxy({}, {get:()=>vi.fn()})}));
-vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{},removeItem:()=>{}});
+vi.hoisted(() => {
+  const storage = {getItem:()=>null,setItem:()=>{},removeItem:()=>{}};
+  Object.defineProperty(globalThis,'localStorage',{value:storage,configurable:true});
+  Object.defineProperty(globalThis,'window',{value:{localStorage:storage},configurable:true});
+});
+vi.mock('../utils/audio',()=>({audio:{setEnabled:vi.fn(),setMusicEnabled:vi.fn(),setSuspended:vi.fn(),stopAmbient:vi.fn(),startAmbient:vi.fn(),playKeystroke:vi.fn(),playSuccess:vi.fn()}}));
+vi.mock('../utils/haptics',()=>({haptics:{setEnabled:vi.fn(),impactLight:vi.fn(),impactMedium:vi.fn(),notificationSuccess:vi.fn()}}));
 const {useStore}=await import('../store');
 const initial=useStore.getState();
 beforeEach(()=>useStore.setState({...initial,appState:AppState.DESKTOP}));
