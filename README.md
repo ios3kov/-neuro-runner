@@ -1,6 +1,6 @@
 # Neuro Runner
 
-A mobile-friendly cyberpunk desktop shell. ARCADE contains one game: CAT TERRITORY, opened in the current tab at https://meow.neurospace.tech. The game is hosted independently; its code, progress and DNS are not changed by this shell.
+A mobile-friendly cyberpunk desktop shell. ARCADE contains one game: CAT TERRITORY. It is mounted inside the NEURO RUNNER interface from https://meow.neurospace.tech, with an in-shell close/back control that returns to ARCADE without reloading the shell.
 
 ## Local use
 

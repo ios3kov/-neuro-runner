@@ -4,7 +4,7 @@ interface FileActivationActions {
   navigateDown: (id: string) => void;
   startGame: (id: GameId) => void;
   openFile: (id: string) => void;
-  openExternalUrl: (url: string) => void;
+  openEmbeddedUrl: (url: string) => void;
 }
 
 /** Shared activation path for grid, list, tree and keyboard navigation. */
@@ -14,7 +14,7 @@ export const activateFileNode = (node: FileNode, actions: FileActivationActions)
     return;
   }
   if (node.externalUrl) {
-    actions.openExternalUrl(node.externalUrl);
+    actions.openEmbeddedUrl(node.externalUrl);
     return;
   }
   if (node.gameId) {

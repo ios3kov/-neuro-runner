@@ -36,7 +36,7 @@ export function useTelegram() {
         if (!tg) return;
         const state = useStore.getState();
         const active = state.appState !== AppState.BOOT && state.appState !== AppState.LOGIN;
-        const showBack = active && (state.appState !== AppState.DESKTOP || state.activeModal !== 'NONE' || !!state.openedFileId || state.navigationPath.length > 1);
+        const showBack = active && (state.appState !== AppState.DESKTOP || state.activeModal !== 'NONE' || !!state.openedFileId || !!state.embeddedGameUrl || state.navigationPath.length > 1);
         const next = `${active}/${showBack}`;
         if (last === next) return;
         last = next;

@@ -25,6 +25,16 @@ async function mobile() {
   assert.equal(await page.locator('input,textarea,[contenteditable="true"]').count(),0,'Native editable control appeared while custom keyboard was open');
   await keyboard.getByRole('button',{name:'ENTER',exact:true}).tap();
   await page.getByRole('button',{name:'ARCADE',exact:true}).waitFor();
+  await page.getByRole('button',{name:'ARCADE',exact:true}).click();
+  await page.route('https://meow.neurospace.tech/**',route=>route.fulfill({contentType:'text/html',body:'<title>CAT TERRITORY QA</title><main>embedded cat</main>'}));
+  const shellUrl=page.url();
+  await page.getByRole('button',{name:'CAT_TERRITORY.EXE',exact:true}).click();
+  await page.locator('iframe[title="CAT TERRITORY"]').waitFor();
+  assert.equal(page.url(),shellUrl,'Shell URL changed while launching CAT TERRITORY');
+  assert.equal(await page.locator('iframe[title="CAT TERRITORY"]').count(),1);
+  await page.getByRole('button',{name:'Close CAT TERRITORY and return to ARCADE'}).click();
+  await page.locator('iframe[title="CAT TERRITORY"]').waitFor({state:'detached'});
+  await page.getByRole('button',{name:'CAT_TERRITORY.EXE',exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   await context.close();
 }
