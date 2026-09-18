@@ -1,30 +1,35 @@
 # Neuro Runner
 
-Cyberpunk retro-OS game shell built with React, TypeScript, Vite and Zustand.
+A mobile-friendly cyberpunk desktop shell. ARCADE contains one game: CAT TERRITORY, opened in the current tab at https://meow.neurospace.tech. The game is hosted independently; its code, progress and DNS are not changed by this shell.
 
-## Run locally
+## Local use
 
-Prerequisites: Node.js 20+ (Node.js 22 recommended).
+Use Node.js 22 and the included package lock.
 
-```bash
-npm install
+```sh
+npm ci
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Use any non-sensitive runner ID. This is a local profile, not an authenticated account. The archive locks and OMNI story are fiction, not security controls or a remote AI.
 
-## Production build
+## Verification and production
 
-```bash
+```sh
 npm run typecheck
+npm run lint
+npm test
 npm run build
+npm audit
 npm run preview
 ```
 
-The preview server also listens on port 3000.
+Styles and fonts are bundled locally. Normal browser startup has no CDN dependency. The Telegram SDK is requested only for Telegram launch parameters; real-device integration still requires testing in Telegram.
 
-## Notes
+Cloudflare serves the generated `dist` directory using `wrangler.jsonc`. The `_headers` file supplies CSP, MIME protection and cache rules. `npx wrangler dev --local` tests the Worker locally without publishing it.
 
-- No Gemini/API key is required by the current application. `OMNI.AI` is currently implemented as an in-app scripted experience and does not call an external AI API.
-- Telegram WebApp integration activates automatically when the app is opened inside Telegram; normal browser mode remains supported for development.
-- The visual shell currently loads Tailwind CSS and web fonts from CDNs, so an internet connection is required for full styling unless those assets are bundled locally in a future production pass.
+`ci.yml` checks direct source checkout, types, lint, unit tests, build, dependencies, local Worker headers, and Chromium/WebKit user journeys. Browser tests mock the external game response to verify same-tab navigation without touching game data.
+
+## Audit handoff
+
+The September 18 audit staging branch is not a release snapshot. Use the complete packaged source and lockfile, or the accompanying patch against baseline `291b7c0f527cd0901810b2db87e5909ad5376ab8`. See `docs/AUDIT_HANDOFF.md` for checked scenarios, measurement limits and publication status. No production deployment is performed by the audit scripts.

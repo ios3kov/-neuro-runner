@@ -1,198 +1,31 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { AppState, LogLevel } from '../types';
 
-// Helper component matching Terminal.tsx logic exactly
-const TypewriterText: React.FC<{ text: string; onComplete?: () => void }> = ({ text, onComplete }) => {
-    const [visibleCount, setVisibleCount] = useState(0);
-    const [isTyping, setIsTyping] = useState(true);
-    const hasStartedRef = useRef(false);
-
-    useEffect(() => {
-        if (hasStartedRef.current) return;
-        hasStartedRef.current = true;
-
-        let index = 0;
-        // Even faster: 4ms to 10ms per char (was 7-17ms)
-        const speed = Math.random() * 6 + 4; 
-        
-        const interval = setInterval(() => {
-            index++;
-            setVisibleCount(index);
-            if (index >= text.length) {
-                setIsTyping(false);
-                clearInterval(interval);
-                if (onComplete) onComplete();
-            }
-        }, speed);
-
-        return () => clearInterval(interval);
-    }, [text]);
-
-    return (
-        <span>
-            {text.split('').map((char, i) => (
-                <span 
-                    key={i} 
-                    className={`${i < visibleCount ? 'inline-block animate-char-fade' : 'hidden'}`}
-                >
-                    {char}
-                </span>
-            ))}
-            {isTyping && <span className="inline-block w-2 h-3 bg-cyan-500/50 ml-[2px] translate-y-[2px]"></span>}
-        </span>
-    );
-};
-
-// Exactly 8 lines as requested
-const BOOT_LOGS = [
-    { msg: "BIOS_CHECK_V9.4... OK", level: LogLevel.SYS },
-    { msg: "NEURAL_LINK_ESTABLISHED", level: LogLevel.SUCCESS },
-    { msg: "DECRYPTING_USER_DATA...", level: LogLevel.WARN },
-    { msg: "MEMORY_ALLOCATION... 64TB", level: LogLevel.SYS },
-    { msg: "LOADING_INTERFACE_GUI...", level: LogLevel.SYS },
-    { msg: "BYPASSING_SECURITY_NODE...", level: LogLevel.ERR },
-    { msg: "AUDIO_DRIVER_INIT... OK", level: LogLevel.SYS },
-    { msg: "SYSTEM READY", level: LogLevel.SUCCESS }
-];
-
+const LINES = ['BIOS_CHECK... OK', 'LOCAL_PROFILE_READY', 'READING_PREFERENCES...', 'ARCHIVE_MOUNTED', 'LOADING_INTERFACE...', 'CAT_TERRITORY_LINK_READY', 'AUDIO_READY_ON_INTERACTION', 'SYSTEM READY'];
 export const BootSequence: React.FC = () => {
-  const setAppState = useStore((s) => s.setAppState);
-  const addLog = useStore((s) => s.addLog);
-  const [logs, setLogs] = useState<{id: string, timestamp: string, level: LogLevel, message: string}[]>([]);
-  
-  // Terminal Logic State
-  const [printedIds, setPrintedIds] = useState<Set<string>>(new Set());
-  const [currentTypingId, setCurrentTypingId] = useState<string | null>(null);
-  const [isBootComplete, setIsBootComplete] = useState(false);
-
-  // Initialize Logs with timestamps
-  useEffect(() => {
-      const generatedLogs = BOOT_LOGS.map((l, i) => ({
-          id: `boot-${i}`,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-          level: l.level,
-          message: l.msg
-      }));
-      setLogs(generatedLogs);
+  const [count, setCount] = useState(0);
+  const done = useRef(false);
+  const lowPower = useStore(s => s.user.settings.lowPowerMode);
+  const suspended = useStore(s => s.isSuspended);
+  const finish = useCallback(() => {
+    if (done.current) return;
+    done.current = true;
+    useStore.getState().addLog(LogLevel.SUCCESS, 'SYSTEM READY');
+    useStore.getState().setAppState(AppState.LOGIN);
   }, []);
-
-  // Sequential Typing Logic
   useEffect(() => {
-    if (currentTypingId) return;
-
-    const nextToPrint = logs.find(log => !printedIds.has(log.id));
-
-    if (nextToPrint) {
-        // Faster delay: 40ms to 130ms between lines (was 70-210ms)
-        const delay = Math.random() * 90 + 40;
-        const timeout = setTimeout(() => {
-            setCurrentTypingId(nextToPrint.id);
-            // Push to global store so history is preserved in the main terminal
-            addLog(nextToPrint.level, nextToPrint.message); 
-        }, delay);
-        return () => clearTimeout(timeout);
-    } else if (logs.length > 0 && printedIds.size === logs.length) {
-        // Sequence Complete
-        if (!isBootComplete) {
-            setIsBootComplete(true);
-            // Faster transition: 350ms (was 550ms)
-            setTimeout(() => setAppState(AppState.LOGIN), 350); 
-        }
+    if (suspended) return;
+    if (lowPower || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const timer = window.setTimeout(finish, 0);
+      return () => window.clearTimeout(timer);
     }
-  }, [logs, printedIds, currentTypingId, isBootComplete, addLog, setAppState]);
-
-  const handleLineComplete = (id: string) => {
-      setPrintedIds(prev => {
-          const next = new Set(prev);
-          next.add(id);
-          return next;
-      });
-      setCurrentTypingId(null);
-  };
-
-  const getColor = (level: LogLevel) => {
-    switch (level) {
-      case LogLevel.SYS: return 'text-cyan-400';
-      case LogLevel.WARN: return 'text-yellow-400';
-      case LogLevel.ERR: return 'text-pink-500';
-      case LogLevel.SUCCESS: return 'text-green-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  return (
-    <div 
-        className="h-full w-full flex flex-col justify-between items-start bg-black px-6 font-mono text-xs md:text-sm overflow-hidden"
-        style={{ paddingTop: 'calc(var(--tg-safe-area-top, 0px) + 20px)', paddingBottom: 'calc(var(--tg-safe-area-bottom, 0px) + 20px)' }}
-    >
-      
-      {/* Fake Header Stats */}
-      <div className="w-full border-b border-cyan-900/30 py-4 mb-4 flex justify-between items-end opacity-50 animate-in fade-in duration-300">
-         <div className="flex flex-col gap-1">
-             <div className="text-[10px] text-cyan-700">MEM_CHECK: 64TB OK</div>
-             <div className="text-[10px] text-cyan-700">CPU_THREADS: 128 ACTIVE</div>
-         </div>
-         <div className="text-[10px] text-cyan-900 font-bold tracking-widest">NEURO_BOOT_LOADER v9.2</div>
-      </div>
-
-      <div className="w-full max-w-3xl mx-auto flex flex-col gap-1 flex-1 justify-end pb-16">
-        {logs.map((log) => {
-          const isPrinted = printedIds.has(log.id);
-          const isTyping = log.id === currentTypingId;
-          const isQueued = !isPrinted && !isTyping;
-
-          if (isQueued) return null;
-
-          return (
-            <div 
-                key={log.id} 
-                className="flex gap-3 opacity-90 digital-line"
-            >
-                <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
-                <span className={`${getColor(log.level)} shrink-0 w-12`}>{log.level}</span>
-                <span className="text-gray-300 tracking-wide digital-text uppercase">
-                    {'>'} {isPrinted ? (
-                        <span>{log.message.toUpperCase()}</span>
-                    ) : (
-                        <TypewriterText 
-                            text={log.message.toUpperCase()} 
-                            onComplete={() => handleLineComplete(log.id)}
-                        />
-                    )}
-                </span>
-            </div>
-          );
-        })}
-      </div>
-      <style>{`
-        @keyframes fadeInLine {
-          from { opacity: 0; transform: translateY(4px); }
-          to { opacity: 0.9; transform: translateY(0); }
-        }
-        @keyframes charFade {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-        .digital-line {
-          animation: fadeInLine 0.1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-          line-height: 1.5rem; 
-        }
-        .digital-text {
-          display: inline-block;
-          vertical-align: bottom;
-        }
-        .animate-char-fade {
-            animation: charFade 0.08s ease-out forwards;
-        }
-        .terminal-cursor {
-          animation: blink 0.5s step-end infinite;
-        }
-      `}</style>
-    </div>
-  );
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index += 1; setCount(index);
+      if (index >= LINES.length) { window.clearInterval(timer); finish(); }
+    }, 110);
+    return () => window.clearInterval(timer);
+  }, [finish, lowPower, suspended]);
+  return <section className="nr-login" aria-label="Starting Neuro Runner"><div className="nr-login-card"><p className="nr-kicker mb-3">NEURO_OS / STARTUP</p><h1 className="nr-brand">NEURO//RUNNER</h1><div className="my-6 text-sm leading-7 min-h-56" aria-hidden="true">{LINES.map((line,index)=><p key={line} style={{visibility:index<count?'visible':'hidden'}}>› {line}</p>)}</div><button className="nr-secondary w-full" onClick={finish}>Skip intro</button></div></section>;
 };
