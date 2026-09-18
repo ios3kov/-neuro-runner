@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-const require=createRequire('/tmp/neuro-audit-tools/package.json');
+const require=createRequire(`${process.env.NEURO_PLAYWRIGHT_ROOT || '/tmp/neuro-audit-tools'}/package.json`);
 const { chromium }=require('playwright');
 const origin='http://127.0.0.1:4173';
 for(let i=0;i<50;i++){try{if((await fetch(origin)).ok)break;}catch{}await new Promise(r=>setTimeout(r,200));}

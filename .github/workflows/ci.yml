@@ -2,16 +2,21 @@ name: CI
 
 on:
   push:
-    branches: [main, refactor/all-recommendations-2026-09-10]
+    branches: [main]
   pull_request:
     branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,5 +25,31 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - run: npm run build
+      - run: npm audit --audit-level=high
+      - run: git diff --check
+
+  mobile-keyboard-smoke:
+    if: github.event_name == 'pull_request'
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install browser test tools
+        run: |
+          npm install --prefix /tmp/neuro-browser --no-package-lock playwright@1.58.2
+          node /tmp/neuro-browser/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Verify built-in mobile keyboard
+        env:
+          NEURO_PLAYWRIGHT_ROOT: /tmp/neuro-browser
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/neuro-preview.log 2>&1 &
+          node scripts/keyboard-browser-probe.mjs
