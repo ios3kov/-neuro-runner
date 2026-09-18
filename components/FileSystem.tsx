@@ -23,6 +23,7 @@ import {
   type ParentLinkNode,
 } from './files/FileSystemParts';
 import { FileSystemChrome } from './files/FileSystemChrome';
+import { EmbeddedGameView } from './EmbeddedGameView';
 import {
   fileSystemData,
   resolvePath,
@@ -43,6 +44,9 @@ export const FileSystem: React.FC = () => {
     setViewMode,
     openedFileId,
     setOpenedFileId,
+    embeddedGameUrl,
+    openEmbeddedGame,
+    closeEmbeddedGame,
     expandedNodes,
     toggleNodeExpansion,
     activeModal,
@@ -62,6 +66,9 @@ export const FileSystem: React.FC = () => {
     setViewMode: state.setViewMode,
     openedFileId: state.openedFileId,
     setOpenedFileId: state.setOpenedFileId,
+    embeddedGameUrl: state.embeddedGameUrl,
+    openEmbeddedGame: state.openEmbeddedGame,
+    closeEmbeddedGame: state.closeEmbeddedGame,
     expandedNodes: state.expandedNodes,
     toggleNodeExpansion: state.toggleNodeExpansion,
     activeModal: state.activeModal,
@@ -111,9 +118,9 @@ export const FileSystem: React.FC = () => {
       navigateDown,
       startGame,
       openFile: setOpenedFileId,
-      openExternalUrl: (url) => window.location.assign(url),
+      openEmbeddedUrl: openEmbeddedGame,
     });
-  }, [navigateDown, setOpenedFileId, startGame]);
+  }, [navigateDown, openEmbeddedGame, setOpenedFileId, startGame]);
 
   const handleNavigate = useCallback((node: FileNode) => {
     audio.playClick();
@@ -139,12 +146,17 @@ export const FileSystem: React.FC = () => {
   const { focusedId, setFocusedId } = useKeyboardNavigation<NavigableNode>({
     items: navigableItems,
     viewMode,
-    isActive: activeModal === 'NONE' && !openedFileId,
+    isActive: activeModal === 'NONE' && !openedFileId && !embeddedGameUrl,
     onNavigate: onKeyboardNavigate,
   });
 
   useEffect(() => {
     const handleGlobalKeys = (event: KeyboardEvent) => {
+      if (embeddedGameUrl && (event.key === 'Escape' || event.key === 'Backspace')) {
+        event.preventDefault();
+        closeEmbeddedGame();
+        return;
+      }
       if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || event.repeat) return;
       if (event.key === 'Backspace') {
         const active = document.activeElement as HTMLElement | null;
@@ -161,7 +173,7 @@ export const FileSystem: React.FC = () => {
     };
     window.addEventListener('keydown', handleGlobalKeys);
     return () => window.removeEventListener('keydown', handleGlobalKeys);
-  }, [handleGoBack]);
+  }, [closeEmbeddedGame, embeddedGameUrl, handleGoBack]);
 
   useEffect(() => setFocusedId(null), [navigationPath, setFocusedId]);
 
@@ -314,6 +326,7 @@ export const FileSystem: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full font-mono select-none overflow-hidden animate-in fade-in duration-700 relative bg-black">
+      {embeddedGameUrl && <EmbeddedGameView url={embeddedGameUrl} onClose={closeEmbeddedGame} />}
       <DecorLayer />
       <div
         className="flex flex-col h-full px-6 pb-6 md:px-12 relative z-10"

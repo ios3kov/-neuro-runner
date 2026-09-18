@@ -37,6 +37,7 @@ interface StoreState {
     navigationPath: string[];
     expandedNodes: string[];
     openedFileId: string | null;
+    embeddedGameUrl: string | null;
     isKeyboardOpen: boolean;
     activeModal: ModalType;
     authTargetId: string | null;
@@ -72,6 +73,8 @@ interface StoreState {
     navigateBreadcrumb: (index: number) => void;
     
     setOpenedFileId: (id: string | null) => void;
+    openEmbeddedGame: (url: string) => void;
+    closeEmbeddedGame: () => void;
     toggleNodeExpansion: (id: string) => void;
     setExpandedNodes: (ids: string[]) => void;
     setKeyboardOpen: (isOpen: boolean) => void;
@@ -179,6 +182,7 @@ export const useStore = create<StoreState>()(
         navigationPath: [CORE_STORE_CONSTANTS.ROOT_ID],
         expandedNodes: [CORE_STORE_CONSTANTS.ROOT_ID],
         openedFileId: null,
+        embeddedGameUrl: null,
         isKeyboardOpen: false,
         activeModal: 'NONE',
         authTargetId: null,
@@ -212,7 +216,7 @@ export const useStore = create<StoreState>()(
                 nextUser.omniIteration += 1;
             }
 
-            set({ user: nextUser, appState: AppState.DESKTOP, currentGame: null, activeModal: 'NONE', authTargetId: null, openedFileId: null, isKeyboardOpen: false, navigationPath: [CORE_STORE_CONSTANTS.ROOT_ID] });
+            set({ user: nextUser, appState: AppState.DESKTOP, currentGame: null, activeModal: 'NONE', authTargetId: null, openedFileId: null, embeddedGameUrl: null, isKeyboardOpen: false, navigationPath: [CORE_STORE_CONSTANTS.ROOT_ID] });
             s.addLog(LogLevel.SUCCESS, `AUTH_TOKEN: ${token}`);
             s.addLog(LogLevel.SYS, `WELCOME, ${username.toUpperCase()}`);
             
@@ -227,6 +231,7 @@ export const useStore = create<StoreState>()(
                 activeModal: 'NONE',
                 authTargetId: null,
                 openedFileId: null,
+                embeddedGameUrl: null,
                 isKeyboardOpen: false,
                 navigationPath: [CORE_STORE_CONSTANTS.ROOT_ID]
             }));
@@ -367,6 +372,20 @@ export const useStore = create<StoreState>()(
             }
         },
 
+        openEmbeddedGame: (url) => {
+            if (url !== 'https://meow.neurospace.tech') return;
+            set({ embeddedGameUrl: url, activeModal: 'NONE', authTargetId: null, openedFileId: null });
+            get().addLog(LogLevel.SYS, 'MOUNTING CAT_TERRITORY.EXE...');
+            if (getEffectsGate(get()).allowHaptics) haptics.impactMedium();
+        },
+
+        closeEmbeddedGame: () => {
+            if (!get().embeddedGameUrl) return;
+            set({ embeddedGameUrl: null });
+            get().addLog(LogLevel.INFO, 'CAT_TERRITORY.EXE CLOSED');
+            if (getEffectsGate(get()).allowHaptics) haptics.impactLight();
+        },
+
         toggleNodeExpansion: (id) => {
             if (id === CORE_STORE_CONSTANTS.ROOT_ID || !isValidId(id)) return;
             set(s => {
@@ -401,39 +420,44 @@ export const useStore = create<StoreState>()(
 
         handleGoBack: () => {
             const s = get();
-            const { appState, activeModal, openedFileId, navigationPath } = s;
+            const { appState, activeModal, openedFileId, embeddedGameUrl, navigationPath } = s;
             const gate = getEffectsGate(s);
 
-            // Priority 1: Game -> Stop
+            // Priority 1: Embedded game -> Return to ARCADE
+            if (embeddedGameUrl) {
+                s.closeEmbeddedGame();
+                return;
+            }
+            // Priority 2: Internal game -> Stop
             if (appState === AppState.GAME) {
                 s.stopGame();
                 return;
             }
-            // Priority 2: Settings -> Desktop
+            // Priority 3: Settings -> Desktop
             if (appState === AppState.SETTINGS) {
                 if (gate.allowHaptics) haptics.impactLight();
                 set({ appState: AppState.DESKTOP });
                 return;
             }
-            // Priority 3: Modal -> Close
+            // Priority 4: Modal -> Close
             if (activeModal !== 'NONE') {
                 if (gate.allowHaptics) haptics.impactLight();
                 set({ activeModal: 'NONE', authTargetId: null });
                 return;
             }
-            // Priority 4: File -> Close
+            // Priority 5: File -> Close
             if (openedFileId) {
                 if (gate.allowHaptics) haptics.impactLight();
                 set({ openedFileId: null });
                 return;
             }
-            // Priority 5: Path -> Up
+            // Priority 6: Path -> Up
             if (navigationPath.length > 1) {
                 if (gate.allowHaptics) haptics.impactLight();
                 s.navigateUp();
                 return;
             }
-            // Priority 6: Desktop -> Exit Confirm
+            // Priority 7: Desktop -> Exit Confirm
             if (appState === AppState.DESKTOP) {
                 if (gate.allowHaptics) haptics.impactLight();
                 s.openModal('EXIT_CONFIRM');

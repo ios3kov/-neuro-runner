@@ -11,6 +11,16 @@ const {useStore}=await import('../store');
 const initial=useStore.getState();
 beforeEach(()=>useStore.setState({...initial,appState:AppState.DESKTOP}));
 describe('production state regressions',()=>{
+  it('mounts and closes CAT TERRITORY without leaving the desktop shell',()=>{
+    useStore.getState().openEmbeddedGame('https://meow.neurospace.tech');
+    expect(useStore.getState()).toMatchObject({appState:AppState.DESKTOP,embeddedGameUrl:'https://meow.neurospace.tech'});
+    useStore.getState().handleGoBack();
+    expect(useStore.getState()).toMatchObject({appState:AppState.DESKTOP,embeddedGameUrl:null});
+  });
+  it('rejects arbitrary iframe destinations',()=>{
+    useStore.getState().openEmbeddedGame('https://example.com');
+    expect(useStore.getState().embeddedGameUrl).toBeNull();
+  });
   it('closes the authentication gate atomically after consuming its target',()=>{
     useStore.getState().openModal('AUTH','personal');
     expect(useStore.getState().consumeAuthTarget()).toBe('personal');
