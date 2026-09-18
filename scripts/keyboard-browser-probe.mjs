@@ -11,7 +11,8 @@ async function mobile() {
   const page=await context.newPage(); page.setDefaultTimeout(7000);
   const errors=[]; page.on('pageerror',e=>errors.push(e.message));
   await page.goto(origin,{waitUntil:'networkidle'});
-  const field=page.getByRole('textbox',{name:'RUNNER_ID'});
+  await page.getByRole('button',{name:'INITIALIZE_BOOT',exact:true}).waitFor();
+  const field=page.locator('#runner-id');
   await field.waitFor();
   assert.equal(await page.locator('input,textarea,[contenteditable="true"]').count(),0,'Mobile login exposes a native editable control');
   await field.tap();
@@ -32,7 +33,8 @@ async function landscape() {
   const context=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true});
   const page=await context.newPage(); page.setDefaultTimeout(7000);
   await page.goto(origin,{waitUntil:'networkidle'});
-  await page.getByRole('textbox',{name:'RUNNER_ID'}).tap();
+  await page.getByRole('button',{name:'INITIALIZE_BOOT',exact:true}).waitFor();
+  await page.locator('#runner-id').tap();
   const keyboard=page.locator('section[aria-label="NEURO RUNNER keyboard"]');
   await keyboard.waitFor();
   const box=await keyboard.boundingBox();
@@ -45,7 +47,8 @@ async function desktop() {
   const context=await browser.newContext({viewport:{width:1280,height:800},hasTouch:false,isMobile:false});
   const page=await context.newPage(); page.setDefaultTimeout(7000);
   await page.goto(origin,{waitUntil:'networkidle'});
-  const field=page.getByRole('textbox',{name:'RUNNER_ID'});
+  await page.getByRole('button',{name:'INITIALIZE_BOOT',exact:true}).waitFor();
+  const field=page.locator('#runner-id');
   await field.focus();
   await page.keyboard.press('ControlOrMeta+A').catch(()=>{});
   // Field is virtual, so clear through repeated Backspace, then physical keys.
