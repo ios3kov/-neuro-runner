@@ -29,12 +29,11 @@ jobs:
           test "$status" -ne 0
           grep -q 'production state regressions' audit-results/regression-red.log
       - run: python3 scripts/apply-production-polish.py && python3 scripts/finish-polish.py
-      - name: Generate candidate dependency lockfile in a fresh install tree
+      - name: Generate candidate dependency lockfile
         run: |
           rm -rf node_modules
           npm install --prefix /tmp/neuro-npm --no-package-lock npm@11
           cli=/tmp/neuro-npm/node_modules/npm/bin/npm-cli.js
-          node "$cli" --version
           node "$cli" install --save-dev --save-exact vitest@4.1.11 wrangler@4.134.0 tailwindcss@3.4.17 postcss@8.5.28 autoprefixer@10.6.1 tailwindcss-animate@1.0.7 eslint@9.39.5 @typescript-eslint/parser@8.70.0 prettier@3.9.8
           node "$cli" install --save-exact @fontsource/share-tech-mono@5.3.0 @fontsource/jetbrains-mono@5.3.0
           node "$cli" pkg set 'scripts.lint=eslint .' 'scripts.format:check=prettier --check App.tsx index.tsx styles.css components/Dialog.tsx state/persistedCore.ts utils/safeStorage.ts'
@@ -51,28 +50,30 @@ jobs:
           npm audit --json > audit-results/dependencies.json
           git diff --check
       - name: Browser tools
-        if: always()
         run: |
           npm install --prefix /tmp/neuro-audit-tools --no-package-lock playwright @axe-core/playwright
-          node /tmp/neuro-audit-tools/node_modules/playwright/cli.js install --with-deps chromium
-      - name: Browser evidence
+          node /tmp/neuro-audit-tools/node_modules/playwright/cli.js install --with-deps chromium webkit
+      - name: Baseline-compatible performance probe
         run: |
           npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/neuro-preview.log 2>&1 &
           node scripts/audit-probe.mjs
-      - name: Package candidate and diagnostics without repository credentials
+      - name: Chromium scenarios and accessibility gates
+        run: node scripts/verify-browser.mjs
+      - name: WebKit scenarios and accessibility gates
+        if: success() || failure()
+        env:
+          AUDIT_BROWSER: webkit
+        run: node scripts/verify-browser.mjs
+      - name: Package source and verification evidence
         if: always()
         run: |
           mkdir -p audit-results
           git diff > audit-results/candidate.patch
           tar --exclude=.git --exclude=node_modules --exclude=audit-results --exclude=dist -czf /tmp/candidate-source.tar.gz .
           cp /tmp/candidate-source.tar.gz audit-results/
-          if test -d dist; then tar -czf audit-results/candidate-build.tar.gz dist; fi
-          if test -f node_modules/.package-lock.json; then tar -czf audit-results/development-dependencies.tar.gz node_modules; fi
-          if test -d /tmp/neuro-audit-tools/node_modules; then tar -czf audit-results/browser-tools.tar.gz -C /tmp/neuro-audit-tools node_modules; fi
-          if test -d "$HOME/.cache/ms-playwright"; then tar -czf audit-results/browser-engines.tar.gz -C "$HOME/.cache" ms-playwright; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: candidate-${{ github.sha }}
           path: audit-results/
-          retention-days: 3
+          retention-days: 7
