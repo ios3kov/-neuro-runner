@@ -66,3 +66,32 @@ input { min-width: 0; font-size: 16px; }
 @media (max-width: 380px) { .nr-file-tile { padding: 12px; } .nr-file-name { font-size: 12px; } }
 @media (max-height: 520px) { .nr-login { align-items: start; padding: 12px; } .nr-login-card { padding: 18px; } .nr-login-card header { margin-bottom: 10px; } .nr-field { margin-block: 10px; } .nr-toolbar { margin-block: 4px; } .nr-breadcrumbs { margin-bottom: 6px; } .nr-file-tile { min-height: 110px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.nr-virtual-field { width:100%; min-height:48px; border:1px solid #345b69; border-radius:4px; color:#effcff; background:#0b1922; padding:12px; display:flex; align-items:center; cursor:text; user-select:none; overflow-wrap:anywhere; }
+.nr-virtual-field[data-active='true'], .nr-virtual-field:focus-visible { border-color:#00f0ff; box-shadow:0 0 0 1px #00f0ff33 inset; }
+.nr-virtual-field__placeholder { color:#567683; }
+.nr-caret { width:8px; height:18px; margin-left:4px; background:#00f0ff; display:inline-block; animation:nr-caret 1s steps(1) infinite; }
+@keyframes nr-caret { 50% { opacity:0; } }
+.nr-virtual-keyboard { display:none; position:fixed; z-index:2147483000; left:0; right:0; bottom:0; padding-bottom:max(8px,var(--tg-safe-area-bottom)); background:#050b10f7; border-top:1px solid #00d8ff66; box-shadow:0 -20px 60px #000a; touch-action:none; user-select:none; }
+.nr-virtual-keyboard__top { min-height:32px; display:flex; align-items:center; justify-content:space-between; padding:4px 10px; color:#79aeb9; border-bottom:1px solid #183943; font-size:10px; letter-spacing:.12em; }
+.nr-virtual-keyboard__top button { min-width:44px; min-height:32px; color:#00f0ff; }
+.nr-virtual-keyboard__rows { width:min(100%,760px); margin:0 auto; padding:6px; display:flex; flex-direction:column; gap:5px; }
+.nr-virtual-keyboard__row { display:flex; justify-content:center; gap:5px; }
+.nr-virtual-keyboard__row > button { flex:1 1 0; min-width:0; min-height:42px; border:1px solid #28515f; border-radius:4px; background:#0b1a23; color:#ddf8ff; font:700 14px 'JetBrains Mono',monospace; }
+.nr-virtual-keyboard__row > button:active { background:#00d8ff; color:#041014; }
+.nr-virtual-keyboard__actions > button { flex:0 0 64px; }
+.nr-virtual-keyboard__actions .nr-key-space { flex:1 1 auto; }
+.nr-virtual-keyboard__actions .nr-key-enter { flex:0 0 92px; border-color:#00d8ff; color:#00f0ff; background:#07323d; }
+@media (pointer:coarse), (hover:none) {
+  .nr-virtual-keyboard { display:block; }
+  .nr-with-virtual-keyboard { padding-bottom:min(330px,48dvh) !important; }
+  .nr-dialog:has(.nr-with-virtual-keyboard) { margin-bottom:min(330px,48dvh); max-height:calc(var(--tg-viewport-height) - min(330px,48dvh) - 12px); }
+}
+@media (max-height:520px) and (orientation:landscape) {
+  .nr-virtual-keyboard__top { display:none; }
+  .nr-virtual-keyboard__rows { padding:3px 8px; gap:3px; }
+  .nr-virtual-keyboard__row { gap:3px; }
+  .nr-virtual-keyboard__row > button { min-height:30px; font-size:12px; }
+  .nr-with-virtual-keyboard { padding-bottom:min(180px,48dvh) !important; }
+  .nr-dialog:has(.nr-with-virtual-keyboard) { margin-bottom:min(180px,48dvh); max-height:calc(var(--tg-viewport-height) - min(180px,48dvh) - 8px); }
+}
