@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../store';
 import type { FileNode, ViewMode } from '../types';
@@ -23,6 +23,7 @@ import {
   type ParentLinkNode,
 } from './files/FileSystemParts';
 import { FileSystemChrome } from './files/FileSystemChrome';
+import { EmbeddedGame } from './EmbeddedGame';
 import {
   fileSystemData,
   resolvePath,
@@ -76,6 +77,7 @@ export const FileSystem: React.FC = () => {
   const username = useStore((state) => state.user.username);
   const sessionStartTime = useStore((state) => state.user.sessionStartTime);
   const showHidden = useStore((state) => state.user.settings.showHidden);
+  const [embeddedGame, setEmbeddedGame] = useState<{ title: string; url: string } | null>(null);
 
   const decorCache = useRef<Map<string, ReturnType<typeof getDecorStats>>>(new Map());
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -111,7 +113,7 @@ export const FileSystem: React.FC = () => {
       navigateDown,
       startGame,
       openFile: setOpenedFileId,
-      openExternalUrl: (url) => window.location.assign(url),
+      openExternalUrl: (url) => setEmbeddedGame({ title: node.name, url }),
     });
   }, [navigateDown, setOpenedFileId, startGame]);
 
@@ -311,6 +313,10 @@ export const FileSystem: React.FC = () => {
       {renderRecursiveTree(fileSystemData, 0)}
     </div>
   );
+
+  if (embeddedGame) {
+    return <EmbeddedGame title={embeddedGame.title} url={embeddedGame.url} onClose={() => setEmbeddedGame(null)} />;
+  }
 
   return (
     <div className="flex flex-col h-full font-mono select-none overflow-hidden animate-in fade-in duration-700 relative bg-black">
