@@ -1,6 +1,10 @@
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { safeStorage } from './utils/safeStorage';
+import { sanitizeCore } from './state/persistedCore';
+import { findNodePath } from './utils/filePath';
+import { fileSystemData, findNodeById } from './data/fileSystem';
 import { AppState, GameId, LogEntry, LogLevel, UserSession, ViewMode, SuspendReason, VALID_VIEW_MODES } from './types';
 import { audio } from './utils/audio';
 import { haptics } from './utils/haptics';
@@ -114,6 +118,7 @@ const getEffectsGate = (state: StoreState) => {
 
 const syncEffects = (state: StoreState) => {
     const gate = getEffectsGate(state);
+    audio.setSuspended(gate.silent);
     const { lowPowerMode } = state.user.settings;
 
     // 1. Ambient Hard Stop (P0 Rule)
@@ -207,7 +212,7 @@ export const useStore = create<StoreState>()(
                 nextUser.omniIteration += 1;
             }
 
-            set({ user: nextUser, appState: AppState.DESKTOP });
+            set({ user: nextUser, appState: AppState.DESKTOP, currentGame: null, activeModal: 'NONE', authTargetId: null, openedFileId: null, isKeyboardOpen: false, navigationPath: [CORE_STORE_CONSTANTS.ROOT_ID] });
             s.addLog(LogLevel.SUCCESS, `AUTH_TOKEN: ${token}`);
             s.addLog(LogLevel.SYS, `WELCOME, ${username.toUpperCase()}`);
             
@@ -215,12 +220,17 @@ export const useStore = create<StoreState>()(
         },
 
         logout: () => {
-            set(s => ({ 
-                user: { ...s.user, sessionToken: '', sessionStartTime: null }, 
+            set(state => ({
+                user: { ...state.user, sessionToken: '', sessionStartTime: null },
+                appState: AppState.LOGIN,
+                currentGame: null,
+                activeModal: 'NONE',
+                authTargetId: null,
                 openedFileId: null,
-                appState: AppState.LOGIN 
+                isKeyboardOpen: false,
+                navigationPath: [CORE_STORE_CONSTANTS.ROOT_ID]
             }));
-            get().addLog(LogLevel.WARN, 'SESSION TERMINATED');
+            get().addLog(LogLevel.INFO, 'SESSION CLOSED');
         },
 
         startGame: (id) => {
@@ -228,6 +238,7 @@ export const useStore = create<StoreState>()(
                 set({ appState: AppState.SETTINGS });
                 return;
             }
+            if (id !== 'AI_CHAT') return;
             set({ currentGame: id, appState: AppState.GAME });
             get().addLog(LogLevel.SYS, `EXECUTING ${id}_PROTOCOL.EXE...`);
             if (getEffectsGate(get()).allowHaptics) haptics.impactMedium();
@@ -330,20 +341,10 @@ export const useStore = create<StoreState>()(
         }),
 
         navigateDown: (id) => {
-            if (!isValidId(id)) return {};
-            
-            return set(s => {
-                const raw = [...s.navigationPath, id];
-                const path = normalizePath(raw);
-                
-                // Dedup check: if path ends up same length/last item, ignore
-                if (path.length === s.navigationPath.length && path[path.length - 1] === s.navigationPath[s.navigationPath.length - 1]) {
-                    return {};
-                }
-
-                const expandedNodes = reconcileExpanded(s.expandedNodes, path);
-                return { navigationPath: path, expandedNodes };
-            });
+            const node = findNodeById(id, fileSystemData);
+            if (!node || node.type !== 'FOLDER') return;
+            const path = findNodePath(id, fileSystemData);
+            if (path) get().setNavigationPath(path);
         },
 
         navigateUp: () => set(s => {
@@ -392,7 +393,7 @@ export const useStore = create<StoreState>()(
 
         consumeAuthTarget: () => {
             const id = get().authTargetId;
-            set({ authTargetId: null });
+            set({ activeModal: 'NONE', authTargetId: null });
             return id;
         },
 
@@ -486,45 +487,11 @@ export const useStore = create<StoreState>()(
           expandedNodes: state.expandedNodes,
       }),
 
-      migrate: (persisted: unknown, _version: number): PersistedState => {
-          const defaults: PersistedState = {
-              user: {
-                  username: 'User',
-                  settings: { ...DEFAULT_SETTINGS },
-                  omniAttempts: 0,
-                  omniDeleted: false,
-                  omniIteration: 0,
-              },
-              viewMode: 'GRID',
-              expandedNodes: [CORE_STORE_CONSTANTS.ROOT_ID],
-          };
-
-          if (!isRecord(persisted)) return defaults;
-          const persistedUser = isRecord(persisted.user) ? persisted.user : {};
-          const persistedSettings = isRecord(persistedUser.settings) ? persistedUser.settings : {};
-          const persistedViewMode = persisted.viewMode;
-
-          return {
-              user: {
-                  username: (typeof persistedUser.username === 'string'
-                      ? persistedUser.username.trim().slice(0, 32)
-                      : '') || defaults.user.username,
-                  settings: {
-                      soundEnabled: typeof persistedSettings.soundEnabled === 'boolean' ? persistedSettings.soundEnabled : true,
-                      musicEnabled: typeof persistedSettings.musicEnabled === 'boolean' ? persistedSettings.musicEnabled : true,
-                      showHidden: typeof persistedSettings.showHidden === 'boolean' ? persistedSettings.showHidden : true,
-                      hapticsEnabled: typeof persistedSettings.hapticsEnabled === 'boolean' ? persistedSettings.hapticsEnabled : true,
-                      lowPowerMode: typeof persistedSettings.lowPowerMode === 'boolean' ? persistedSettings.lowPowerMode : false,
-                  },
-                  omniAttempts: safeCounter(persistedUser.omniAttempts),
-                  omniDeleted: persistedUser.omniDeleted === true,
-                  omniIteration: safeCounter(persistedUser.omniIteration),
-              },
-              viewMode: typeof persistedViewMode === 'string' && VALID_VIEW_MODES.includes(persistedViewMode as ViewMode)
-                  ? persistedViewMode as ViewMode
-                  : defaults.viewMode,
-              expandedNodes: normalizeExpanded(persisted.expandedNodes),
-          };
+      storage: createJSONStorage(() => safeStorage),
+      migrate: (persisted: unknown) => sanitizeCore(persisted),
+      merge: (persisted, current) => {
+          const normalized = sanitizeCore(persisted);
+          return { ...current, ...normalized, user: { ...current.user, ...normalized.user } };
       },
 
       onRehydrateStorage: () => (state) => {
