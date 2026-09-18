@@ -5,6 +5,9 @@ on:
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: final-audit-candidate
+  cancel-in-progress: true
 jobs:
   package:
     if: contains(github.event.head_commit.message, '[audit-final]')
@@ -57,21 +60,30 @@ jobs:
       - name: Package exact source, evidence and baseline patch
         if: always()
         run: |
-          mkdir -p final-artifact
+          mkdir -p final-artifact/source
           cp -R /tmp/neuro-release/audit-results final-artifact/final-verification
           cp /tmp/neuro-release/docs/AUDIT_HANDOFF.md final-artifact/AUDIT_HANDOFF.md
           cp /tmp/candidate-evidence/baseline.json final-artifact/lab-performance.json
           if test -f /tmp/worker.log; then cp /tmp/worker.log final-artifact/cloudflare-local.log; fi
+          rsync -a --delete --exclude=.git --exclude=.wrangler --exclude=node_modules --exclude=dist --exclude=audit-results --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttf' --exclude='*.otf' --exclude='*.eot' /tmp/neuro-release/ final-artifact/source/
           git worktree add --detach /tmp/neuro-baseline 291b7c0f527cd0901810b2db87e5909ad5376ab8
-          rsync -a --delete --exclude=.git --exclude=node_modules --exclude=dist --exclude=audit-results /tmp/neuro-release/ /tmp/neuro-baseline/
+          rsync -a --delete --exclude=.git final-artifact/source/ /tmp/neuro-baseline/
           git -C /tmp/neuro-baseline add -A
           git -C /tmp/neuro-baseline diff --cached --binary > final-artifact/final.patch
-          tar --exclude=node_modules --exclude=dist --exclude=audit-results --exclude=.git -czf final-artifact/NEURO_RUNNER_SOURCE.tar.gz -C /tmp/neuro-release .
+          python3 - <<'PY'
+          from pathlib import Path
+          forbidden={'.woff','.woff2','.ttf','.otf','.eot'}
+          files=[p for p in Path('final-artifact').rglob('*') if p.is_file()]
+          assert not any(p.suffix.lower() in forbidden for p in files)
+          assert not any('node_modules' in p.parts or '.wrangler' in p.parts for p in files)
+          print('PACKAGE_CONTENTS_VERIFIED',len(files))
+          PY
           cd final-artifact
-          sha256sum NEURO_RUNNER_SOURCE.tar.gz final.patch > SHA256SUMS.txt
+          sha256sum final.patch source/package-lock.json > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: neuro-runner-audit-final-${{ github.sha }}
           path: final-artifact/
+          include-hidden-files: true
           retention-days: 14
