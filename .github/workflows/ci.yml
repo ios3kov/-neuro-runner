@@ -43,6 +43,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm run build
       - name: Install browser test tools
         run: |
           npm install --prefix /tmp/neuro-browser --no-package-lock playwright@1.58.2
