@@ -28,6 +28,7 @@ jobs:
         run: |
           npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/neuro-preview.log 2>&1 &
           node scripts/audit-probe.mjs
+          node scripts/keyboard-browser-probe.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
